@@ -1,17 +1,17 @@
-from atc_grid_env import Scenario, AlgoSimulation, MultiAlgorithmVisualizer
-from planner import simple_planner
-from planner import simple_planner
-from planner import simple_planner
+from atc_grid_env_central import Scenario, AlgoSimulation, MultiAlgorithmVisualizer
+from planner import centralized_planner
+from planner import centralized_planner
+from planner import centralized_planner
 
 scenario = Scenario(
-    grid_size=100,
+    grid_size=50,
     max_planes=8,
     sim_time=60
 )
 
-simA = AlgoSimulation(scenario, simple_planner, "Algorithm A")
-simB = AlgoSimulation(scenario, simple_planner, "Algorithm B")
-simC = AlgoSimulation(scenario, simple_planner, "Algorithm C")
+simA = AlgoSimulation(scenario, centralized_planner, "Algorithm A")
+simB = AlgoSimulation(scenario, centralized_planner, "Algorithm B")
+simC = AlgoSimulation(scenario, centralized_planner, "Algorithm C")
 
 visualizer = MultiAlgorithmVisualizer(
     scenario,

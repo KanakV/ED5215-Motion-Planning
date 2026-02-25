@@ -98,36 +98,41 @@ class AlgoSimulation:
             self.plane_counter += 1
             self.planes.append(plane)
 
-        # Real-time replanning
-        for plane in self.planes:
+        # Collect active planes
+        active_planes = [p for p in self.planes if p["active"]]
 
-            if not plane["active"]:
+        if not active_planes:
+            return
+
+        # CENTRALIZED PLANNING CALL
+        start_compute = time.time()
+
+        actions = self.planner(
+            self.grid.copy(),
+            active_planes,
+            self.runway
+        )
+
+        compute = time.time() - start_compute
+        self.total_compute_time += compute
+        self.planning_calls += 1
+
+        # Execute actions simultaneously
+        for plane in active_planes:
+
+            if plane["id"] not in actions:
                 continue
 
-            start = time.time()
+            next_pos = actions[plane["id"]]
 
-            path = self.planner(
-                self.grid.copy(),
-                plane["pos"],
-                self.runway
+            plane["prev_pos"] = plane["pos"]
+
+            plane["path_length"] += np.linalg.norm(
+                np.array(next_pos) - np.array(plane["pos"])
             )
 
-            compute = time.time() - start
-            self.total_compute_time += compute
-            self.planning_calls += 1
-
-            if path:
-
-                next_pos = path[0]
-
-                plane["prev_pos"] = plane["pos"]
-
-                plane["path_length"] += np.linalg.norm(
-                    np.array(next_pos) - np.array(plane["pos"])
-                )
-
-                plane["pos"] = next_pos
-                plane["history"].append(next_pos)
+            plane["pos"] = next_pos
+            plane["history"].append(next_pos)
 
             if plane["pos"] == self.runway:
                 plane["active"] = False
