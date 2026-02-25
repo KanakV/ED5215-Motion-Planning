@@ -7,8 +7,14 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.transforms import Affine2D
 from matplotlib.patches import Circle
+import os
+from config.config import PLANE_RADIUS, COLLISION_RADIUS
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PARENT_DIR = os.path.dirname(BASE_DIR)
+RESOURCES_DIR = os.path.join(BASE_DIR, "resources")
 
+print(BASE_DIR)
 # =====================================================
 # SCENARIO (Shared Random Scenario Per Run)
 # =====================================================
@@ -16,7 +22,6 @@ from matplotlib.patches import Circle
 class Scenario:
 
     def __init__(self, grid_size, max_planes, sim_time):
-
         self.grid_size = grid_size
         self.sim_time = sim_time
 
@@ -32,8 +37,10 @@ class Scenario:
         t = 0
         count = 0
 
-        while t < sim_time and count < max_planes:
 
+        while t < sim_time and count < max_planes:
+            # Random time between spawns (0.5 to 4 seconds)
+            # TODO: Can try to fix spawn time and check how algorithms perform with different spawn rates
             t += random.uniform(0.5, 4)
 
             border_positions = []
@@ -56,8 +63,7 @@ class Scenario:
 
 class AlgoSimulation:
 
-    def __init__(self, scenario, planner, name):
-
+    def __init__(self, scenario : Scenario, planner, name : str):
         self.name = name
         self.planner = planner
 
@@ -67,8 +73,8 @@ class AlgoSimulation:
 
         self.grid = np.zeros((self.grid_size, self.grid_size), dtype=int)
 
-        self.plane_radius = 2.2
-        self.collision_threshold = self.plane_radius * 2
+        self.plane_radius = PLANE_RADIUS
+        self.collision_threshold = COLLISION_RADIUS
 
         self.planes = []
         self.plane_counter = 0
@@ -77,12 +83,10 @@ class AlgoSimulation:
         self.planning_calls = 0
 
     # -------------------------------------------------
-
     def step(self, current_time):
 
         # Spawn using shared schedule
         while self.spawn_events and current_time >= self.spawn_events[0][0]:
-
             _, pos = self.spawn_events.pop(0)
 
             plane = {
@@ -183,9 +187,9 @@ class MultiAlgorithmVisualizer:
         self.fig, self.axes = plt.subplots(1, 3, figsize=(20, 6))
         self.fig.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.92, wspace=0.15)
 
-        self.plane_img = plt.imread("plane.png")
-        self.runway_img = plt.imread("runway.png")
-        self.background_img = plt.imread("background.jpg")
+        self.plane_img = plt.imread(os.path.join(RESOURCES_DIR, "plane.png"))
+        self.runway_img = plt.imread(os.path.join(RESOURCES_DIR, "runway.png"))
+        self.background_img = plt.imread(os.path.join(RESOURCES_DIR, "background.jpg"))
 
         self.start_time = None
 
@@ -412,8 +416,9 @@ class MultiAlgorithmVisualizer:
         # Write CSV
         fieldnames = ["Plane"] + algo_names
 
-        with open("algorithm_comparison_table.csv", "w", newline="") as f:
+        csv_path = os.path.join(PARENT_DIR, "algorithm_comparison_table.csv")
 
+        with open(csv_path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
 
             writer.writeheader()
