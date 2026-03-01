@@ -56,7 +56,7 @@ import heapq
 import math
 from typing import Dict, List, Optional, Set, Tuple
 
-from config.config import PLANE_RADIUS, WARNING_RADIUS
+from config.config import PLANE_RADIUS, WARNING_RADIUS, MAX_NODES
 
 # ---------------------------------------------------------------------------
 # Types
@@ -161,7 +161,7 @@ def _spacetime_astar(
             best_g[key]    = ng
             came_from[key] = (pos, t)
             counter       += 1
-            
+
             # ---- Edge-avoidance bias only for first few timesteps ----
             epsilon = 1e-3
             spawn_bias_steps = 6   # apply bias only shortly after spawn
@@ -321,7 +321,7 @@ def _cbs(
     agents:    List[Dict],
     goal:      Pos,
     grid_size: int,
-    max_nodes: int = 2500,
+    max_nodes: int = MAX_NODES,
 ) -> Tuple[Dict[int, List[Pos]], bool, int]:
     """
     Run CBS. Returns (paths, budget_exhausted, nodes_expanded).

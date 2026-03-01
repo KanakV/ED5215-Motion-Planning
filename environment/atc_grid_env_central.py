@@ -84,42 +84,60 @@ class Scenario:
 class MetricsTracker:
     """
     Tracks all metrics per simulation:
-      Efficiency   : path length per plane, total path length, makespan, avg travel time
-      Safety       : collision count, near miss count, min separation, safety violation rate
-      Computational: max planning time per step, std dev of planning time, total runtime
-      Congestion   : avg active agents per step, wait time per plane
-      Fairness     : variance of travel time
+      Efficiency      : path length per plane, total path length, makespan, avg travel time
+                        NORMALISED: detour ratio (path / manhattan), normalised travel time
+      Safety          : collision count, near miss count, min separation, safety violation rate
+      Computational   : max/std planning time, total runtime
+                        NORMALISED: planning time per active agent
+      Congestion      : avg active agents per step, wait time per plane
+                        NORMALISED: wait ratio (wait_steps / travel_time) per plane
+      Fairness        : variance of travel time
+                        NORMALISED: coefficient of variation of detour ratios
     """
 
-    def __init__(self, collision_threshold, warning_threshold):
+    def __init__(self, collision_threshold, warning_threshold, runway, grid_size):
         self.collision_threshold = collision_threshold
-        self.warning_threshold = warning_threshold
+        self.warning_threshold   = warning_threshold
+        self.runway              = runway       # (row, col) — needed for Manhattan baseline
+        self.grid_size           = grid_size    # needed to cap/validate baselines
 
         # Per-step records
-        self.planning_times = []           # compute time each step
-        self.active_counts = []            # active plane count each step
+        self.planning_times     = []            # raw compute time each step
+        self.active_counts      = []            # active plane count each step
+        self.planning_agents    = []            # how many agents were active during planning
 
-        # Per-plane records  {plane_id: {...}}
-        self.plane_spawn_step = {}         # step when plane spawned
-        self.plane_land_step = {}          # step when plane landed
-        self.plane_wait_steps = {}         # steps where plane didn't move toward runway
+        # Per-plane records  {plane_id: value}
+        self.plane_spawn_step   = {}
+        self.plane_land_step    = {}
+        self.plane_wait_steps   = {}
+        self.plane_spawn_pos    = {}            # (row, col) at spawn — for Manhattan baseline
 
         # Safety counters
-        self.collision_count = 0
-        self.near_miss_count = 0
-        self.min_separation = float("inf")
-        self.total_pair_steps = 0          # total (active pair, step) combinations
-        self.violation_steps = 0           # pair-steps inside collision threshold
+        self.collision_count    = 0
+        self.near_miss_count    = 0
+        self.min_separation     = float("inf")
+        self.total_pair_steps   = 0
+        self.violation_steps    = 0
 
         # Timing
         self.wall_start = None
-        self.wall_end = None
+        self.wall_end   = None
 
-        self._step_index = 0
-        self._collisions_this_step = set()
-        self._near_misses_this_step = set()
+        self._step_index              = 0
+        self._collisions_this_step    = set()
+        self._near_misses_this_step   = set()
 
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _manhattan_to_runway(self, pos: tuple) -> int:
+        """Manhattan distance from pos to runway. Minimum 1 to avoid div/0."""
+        return max(1, abs(pos[0] - self.runway[0]) + abs(pos[1] - self.runway[1]))
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
 
     def start(self):
         self.wall_start = time.time()
@@ -127,7 +145,9 @@ class MetricsTracker:
     def finish(self):
         self.wall_end = time.time()
 
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
+    # Per-step recording
+    # ------------------------------------------------------------------
 
     def record_step(self, planning_time, active_planes, prev_positions):
         """
@@ -139,24 +159,23 @@ class MetricsTracker:
         self._step_index += 1
         self.planning_times.append(planning_time)
         self.active_counts.append(len(active_planes))
+        self.planning_agents.append(len(active_planes))
 
-        # --- Spawn / land tracking ---
+        # Spawn tracking
         for p in active_planes:
             pid = p["id"]
             if pid not in self.plane_spawn_step:
                 self.plane_spawn_step[pid] = self._step_index
+                self.plane_spawn_pos[pid]  = p["pos"]   # position at first sighting
 
-        # --- Wait time: did the plane move closer to runway? ---
-        # (tracked externally via record_landing / record_wait)
-
-        # --- Safety checks ---
-        self._collisions_this_step = set()
+        # Safety checks
+        self._collisions_this_step  = set()
         self._near_misses_this_step = set()
 
         for i in range(len(active_planes)):
             for j in range(i + 1, len(active_planes)):
-                p1 = active_planes[i]
-                p2 = active_planes[j]
+                p1   = active_planes[i]
+                p2   = active_planes[j]
                 dist = float(np.linalg.norm(
                     np.array(p1["pos"]) - np.array(p2["pos"])
                 ))
@@ -179,88 +198,193 @@ class MetricsTracker:
                         self._near_misses_this_step.add(pair)
                         self.near_miss_count += 1
 
-    # --------------------------------------------------
-
     def record_landing(self, plane_id):
         self.plane_land_step[plane_id] = self._step_index
 
     def record_wait(self, plane_id):
         self.plane_wait_steps[plane_id] = self.plane_wait_steps.get(plane_id, 0) + 1
 
-    # --------------------------------------------------
+    # ------------------------------------------------------------------
+    # Compute all metrics
+    # ------------------------------------------------------------------
 
     def compute(self, planes):
         """
-        Returns a dict of all metrics given the final list of plane dicts.
+        Returns a dict of raw + normalised metrics.
+
+        Normalisation strategy
+        ----------------------
+        Efficiency
+          detour_ratio          = path_length / manhattan_to_runway
+                                  1.0 = perfect straight-line path
+                                  >1  = how many times longer than optimal
+
+          norm_travel_time      = travel_time_steps / manhattan_to_runway
+                                  1.0 = landed in the theoretical minimum steps
+
+        Computational
+          planning_time_per_agent = planning_time_s / n_active_agents
+                                  Isolates algorithmic cost from problem size
+
+        Congestion
+          wait_ratio            = wait_steps / travel_time_steps  (per plane)
+                                  0.0 = never waited, 1.0 = entire trip was waiting
+
+        Fairness
+          detour_ratio_cv       = std(detour_ratios) / mean(detour_ratios)
+                                  Coefficient of variation — 0 = perfectly fair
+                                  Controls for planes spawning at different distances
         """
-        # --- Efficiency ---
+
+        # ── Per-plane baselines ───────────────────────────────────────────
+        manhattan = {
+            p["id"]: self._manhattan_to_runway(
+                self.plane_spawn_pos.get(p["id"], p["pos"])
+            )
+            for p in planes
+        }
+
         path_lengths = {p["id"]: p["path_length"] for p in planes}
-        total_path = sum(path_lengths.values())
-        avg_path = total_path / len(planes) if planes else 0
 
-        # Travel time = steps from spawn to landing (only landed planes)
-        travel_times = []
+        # ── Travel times (only landed planes) ────────────────────────────
+        travel_times      = {}
+        norm_travel_times = {}
+        detour_ratios     = {}
+        wait_ratios       = {}
+
         for pid, land in self.plane_land_step.items():
-            spawn = self.plane_spawn_step.get(pid, 1)
-            travel_times.append(land - spawn)
+            spawn        = self.plane_spawn_step.get(pid, 1)
+            travel_t     = max(1, land - spawn)
+            manhattan_d  = manhattan.get(pid, 1)
+            path_len     = path_lengths.get(pid, manhattan_d)
+            wait_s       = self.plane_wait_steps.get(pid, 0)
 
-        makespan = max(self.plane_land_step.values()) - min(self.plane_spawn_step.values()) \
+            travel_times[pid]      = travel_t
+            norm_travel_times[pid] = travel_t / manhattan_d
+            detour_ratios[pid]     = path_len / manhattan_d
+            wait_ratios[pid]       = wait_s   / travel_t
+
+        # ── Efficiency ───────────────────────────────────────────────────
+        total_path      = sum(path_lengths.values())
+        avg_path        = total_path / len(planes) if planes else 0
+        avg_detour      = statistics.mean(detour_ratios.values())     if detour_ratios else 0
+        avg_norm_travel = statistics.mean(norm_travel_times.values()) if norm_travel_times else 0
+
+        makespan        = (
+            max(self.plane_land_step.values()) - min(self.plane_spawn_step.values())
             if self.plane_land_step else 0
-        avg_travel_time = statistics.mean(travel_times) if travel_times else 0
+        )
+        avg_travel_time = statistics.mean(travel_times.values()) if travel_times else 0
 
-        # --- Safety ---
+        # ── Safety ───────────────────────────────────────────────────────
         safety_violation_rate = (
             self.violation_steps / self.total_pair_steps
             if self.total_pair_steps > 0 else 0
         )
         min_sep = self.min_separation if self.min_separation != float("inf") else None
 
-        # --- Computational ---
+        # ── Computational ────────────────────────────────────────────────
         max_planning = max(self.planning_times) if self.planning_times else 0
         std_planning = statistics.stdev(self.planning_times) if len(self.planning_times) > 1 else 0
-        total_runtime = (self.wall_end - self.wall_start) if (self.wall_start and self.wall_end) else 0
+        total_runtime = (
+            (self.wall_end - self.wall_start)
+            if (self.wall_start and self.wall_end) else 0
+        )
 
-        # --- Congestion ---
-        avg_active = statistics.mean(self.active_counts) if self.active_counts else 0
-        total_wait = sum(self.plane_wait_steps.values())
-        avg_wait = total_wait / len(planes) if planes else 0
+        # planning_time_per_agent: zip each step's time with its agent count
+        per_agent_times = [
+            t / max(1, n)
+            for t, n in zip(self.planning_times, self.planning_agents)
+            if n > 0
+        ]
+        avg_planning_per_agent = statistics.mean(per_agent_times) if per_agent_times else 0
+        max_planning_per_agent = max(per_agent_times)              if per_agent_times else 0
 
-        # --- Fairness ---
-        travel_time_variance = statistics.variance(travel_times) if len(travel_times) > 1 else 0
+        # ── Congestion ───────────────────────────────────────────────────
+        avg_active     = statistics.mean(self.active_counts) if self.active_counts else 0
+        total_wait     = sum(self.plane_wait_steps.values())
+        avg_wait       = total_wait / len(planes) if planes else 0
+        avg_wait_ratio = statistics.mean(wait_ratios.values()) if wait_ratios else 0
 
+        # ── Fairness ─────────────────────────────────────────────────────
+        travel_time_variance = (
+            statistics.variance(list(travel_times.values()))
+            if len(travel_times) > 1 else 0
+        )
+
+        # Coefficient of variation of detour ratios
+        if len(detour_ratios) > 1:
+            dr_vals         = list(detour_ratios.values())
+            dr_mean         = statistics.mean(dr_vals)
+            dr_std          = statistics.stdev(dr_vals)
+            detour_ratio_cv = dr_std / dr_mean if dr_mean > 0 else 0
+        else:
+            detour_ratio_cv = 0
+
+        # ── Assemble output ───────────────────────────────────────────────
         return {
+            # ── RAW ──────────────────────────────────────────────────────
             "efficiency": {
-                "path_length_per_plane": path_lengths,
-                "total_path_length": total_path,
-                "avg_path_length": avg_path,
-                "makespan_steps": makespan,
-                "avg_travel_time_steps": avg_travel_time,
+                "path_length_per_plane":    path_lengths,
+                "total_path_length":        total_path,
+                "avg_path_length":          avg_path,
+                "makespan_steps":           makespan,
+                "avg_travel_time_steps":    avg_travel_time,
             },
             "safety": {
-                "collision_count": self.collision_count,
-                "near_miss_count": self.near_miss_count,
-                "min_separation_distance": min_sep,
-                "safety_violation_rate": safety_violation_rate,
+                "collision_count":          self.collision_count,
+                "near_miss_count":          self.near_miss_count,
+                "min_separation_distance":  min_sep,
+                "safety_violation_rate":    safety_violation_rate,
             },
             "computational": {
-                "max_planning_time_s": max_planning,
-                "std_planning_time_s": std_planning,
-                "total_runtime_s": total_runtime,
+                "max_planning_time_s":      max_planning,
+                "std_planning_time_s":      std_planning,
+                "total_runtime_s":          total_runtime,
             },
             "congestion": {
                 "avg_active_agents_per_step": avg_active,
-                "avg_wait_time_steps": avg_wait,
-                "total_wait_steps": total_wait,
+                "avg_wait_time_steps":        avg_wait,
+                "total_wait_steps":           total_wait,
             },
             "fairness": {
-                "travel_time_variance": travel_time_variance,
-                "travel_times_per_plane": {
+                "travel_time_variance":     travel_time_variance,
+                "travel_times_per_plane":   {
                     pid: self.plane_land_step[pid] - self.plane_spawn_step.get(pid, 1)
                     for pid in self.plane_land_step
                 },
             },
-        }
 
+            # ── NORMALISED ───────────────────────────────────────────────
+            "normalised": {
+                # Efficiency
+                # detour_ratio: 1.0 = optimal straight-line path
+                # e.g. 1.4 means the algorithm flew 40% further than necessary
+                "avg_detour_ratio":             avg_detour,
+                "detour_ratio_per_plane":       detour_ratios,
+
+                # norm_travel_time: 1.0 = landed in minimum possible steps
+                # e.g. 2.0 means took twice as long as the Manhattan distance suggests
+                "avg_norm_travel_time":         avg_norm_travel,
+                "norm_travel_time_per_plane":   norm_travel_times,
+
+                # Computational
+                # planning_time_per_agent isolates algorithm cost from fleet size
+                # compare this across algorithms with different agent counts
+                "avg_planning_time_per_agent_s": avg_planning_per_agent,
+                "max_planning_time_per_agent_s": max_planning_per_agent,
+
+                # Congestion
+                # wait_ratio: 0.0 = never waited, 1.0 = entire trip was waiting
+                "avg_wait_ratio":               avg_wait_ratio,
+                "wait_ratio_per_plane":         wait_ratios,
+
+                # Fairness
+                # detour_ratio_cv: 0.0 = all planes got equally good paths
+                # higher = algorithm is unfair to certain spawn positions
+                "detour_ratio_cv":              detour_ratio_cv,
+            },
+        }
 
 # =====================================================
 # SINGLE ALGORITHM SIMULATION
@@ -290,9 +414,11 @@ class AlgoSimulation:
 
         # Metrics
         self.metrics = MetricsTracker(
-            collision_threshold=self.collision_threshold,
-            warning_threshold=self.warning_threshold,
-        )
+                    collision_threshold=self.collision_threshold,
+                    warning_threshold=self.warning_threshold,
+                    runway=self.runway,
+                    grid_size=self.grid_size,
+                )
         self.metrics.start()
 
         # Replay log
@@ -741,6 +867,16 @@ class MultiAlgorithmVisualizer:
 
             fair = m["fairness"]
             print(f"  Travel Time Variance    : {fair['travel_time_variance']:.2f}")
+
+            norm = m["normalised"]
+            print(f"\n  -- Normalised --")
+            print(f"  Avg Detour Ratio        : {norm['avg_detour_ratio']:.3f}  (1.0 = optimal straight-line)")
+            print(f"  Avg Norm Travel Time    : {norm['avg_norm_travel_time']:.3f}  (1.0 = min possible steps)")
+            print(f"  Avg Plan Time/Agent (s) : {norm['avg_planning_time_per_agent_s']:.6f}")
+            print(f"  Max Plan Time/Agent (s) : {norm['max_planning_time_per_agent_s']:.6f}")
+            print(f"  Avg Wait Ratio          : {norm['avg_wait_ratio']:.3f}  (0.0 = never waited)")
+            print(f"  Detour Ratio CV         : {norm['detour_ratio_cv']:.3f}  (0.0 = perfectly fair)")
+
 
         # Save full JSON
         json_path = os.path.join(RESULTS_DIR, "metrics.json")
