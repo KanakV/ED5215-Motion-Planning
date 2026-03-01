@@ -161,8 +161,30 @@ def _spacetime_astar(
             best_g[key]    = ng
             came_from[key] = (pos, t)
             counter       += 1
-            heapq.heappush(open_heap, (ng + _heuristic(npos, goal), counter, ng, npos))
+            
+            # ---- Edge-avoidance bias only for first few timesteps ----
+            epsilon = 1e-3
+            spawn_bias_steps = 6   # apply bias only shortly after spawn
 
+            bias = 0
+            if t < spawn_bias_steps:
+                x, y = npos
+                if (
+                    x == 0 or
+                    y == 0 or
+                    x == grid_size - 1 or
+                    y == grid_size - 1
+                ):
+                    bias = 1
+
+            counter += 1
+            heapq.heappush(
+                open_heap,
+                (ng + _heuristic(npos, goal) + epsilon * bias,
+                counter,
+                ng,
+                npos)
+            )
     return None
 
 

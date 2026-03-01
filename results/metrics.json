@@ -2,47 +2,61 @@
   "Algorithm A": {
     "efficiency": {
       "path_length_per_plane": {
-        "0": 19.0,
-        "1": 16.0,
-        "2": 11.0,
-        "3": 6.0,
-        "4": 3.0,
-        "5": 3.0,
-        "6": 3.0,
-        "7": 2.0,
-        "8": 2.0,
-        "9": 2.0,
-        "10": 2.0,
-        "11": 2.0,
-        "12": 2.0,
-        "13": 2.0,
-        "14": 1.0
+        "0": 43.0,
+        "1": 30.0,
+        "2": 22.0,
+        "3": 37.0,
+        "4": 35.0,
+        "5": 43.0,
+        "6": 43.0,
+        "7": 60.0,
+        "8": 58.0,
+        "9": 43.0,
+        "10": 33.0,
+        "11": 30.0,
+        "12": 40.0,
+        "13": 18.0,
+        "14": 34.0
       },
-      "total_path_length": 76.0,
-      "avg_path_length": 5.066666666666666,
-      "makespan_steps": 17,
-      "avg_travel_time_steps": 14
+      "total_path_length": 569.0,
+      "avg_path_length": 37.93333333333333,
+      "makespan_steps": 82,
+      "avg_travel_time_steps": 35.93333333333333
     },
     "safety": {
       "collision_count": 0,
-      "near_miss_count": 5,
-      "min_separation_distance": 1.0,
+      "near_miss_count": 0,
+      "min_separation_distance": 2.23606797749979,
       "safety_violation_rate": 0.0
     },
     "computational": {
-      "max_planning_time_s": 9.625566005706787,
-      "std_planning_time_s": 3.2975666138591824,
-      "total_runtime_s": 34.00649404525757
+      "max_planning_time_s": 6.097648859024048,
+      "std_planning_time_s": 1.6129565801647072,
+      "total_runtime_s": 104.2145140171051
     },
     "congestion": {
-      "avg_active_agents_per_step": 3.9473684210526314,
-      "avg_wait_time_steps": 0.0,
-      "total_wait_steps": 0
+      "avg_active_agents_per_step": 6.595238095238095,
+      "avg_wait_time_steps": 0.26666666666666666,
+      "total_wait_steps": 4
     },
     "fairness": {
-      "travel_time_variance": 0,
+      "travel_time_variance": 130.2095238095238,
       "travel_times_per_plane": {
-        "1": 14
+        "2": 20,
+        "1": 28,
+        "0": 41,
+        "3": 35,
+        "4": 33,
+        "13": 16,
+        "5": 41,
+        "6": 41,
+        "11": 28,
+        "10": 31,
+        "14": 32,
+        "9": 41,
+        "12": 38,
+        "7": 58,
+        "8": 56
       }
     }
   }
