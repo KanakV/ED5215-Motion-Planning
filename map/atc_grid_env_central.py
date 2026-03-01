@@ -32,6 +32,7 @@ print(BASE_DIR)
 class Scenario:
 
     def __init__(self, grid_size, max_planes, sim_time):
+
         self.grid_size = grid_size
         self.sim_time = sim_time
 
@@ -41,24 +42,52 @@ class Scenario:
             random.randint(grid_size // 4, 3 * grid_size // 4)
         )
 
-        # Pre-generate spawn events (time + position)
         self.spawn_events = []
 
         t = 0
         count = 0
 
+        # Keep track of recently used spawn positions
+        recent_spawns = []
+
+        # Precompute border positions once
+        border_positions = []
+        for i in range(grid_size):
+            border_positions.append((0, i))
+            border_positions.append((grid_size - 1, i))
+            border_positions.append((i, 0))
+            border_positions.append((i, grid_size - 1))
+
         while t < sim_time and count < max_planes:
+
             t += random.uniform(0.5, 4)
 
-            border_positions = []
-            for i in range(grid_size):
-                border_positions.append((0, i))
-                border_positions.append((grid_size - 1, i))
-                border_positions.append((i, 0))
-                border_positions.append((i, grid_size - 1))
+            # Try to find safe spawn position
+            max_attempts = 50
+            for _ in range(max_attempts):
 
-            pos = random.choice(border_positions)
+                pos = random.choice(border_positions)
+
+                # Avoid runway location
+                if pos == self.runway:
+                    continue
+
+                # Avoid recent spawn duplication
+                if pos in recent_spawns:
+                    continue
+
+                break
+            else:
+                # fallback if no safe position found
+                pos = random.choice(border_positions)
+
             self.spawn_events.append((t, pos))
+
+            # Maintain small memory window of used spawn points
+            recent_spawns.append(pos)
+            if len(recent_spawns) > 5:
+                recent_spawns.pop(0)
+
             count += 1
 
 
