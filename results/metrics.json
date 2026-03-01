@@ -3,36 +3,54 @@
     "efficiency": {
       "path_length_per_plane": {
         "0": 26.0,
-        "1": 22.0,
-        "2": 17.0,
-        "3": 11.0,
-        "4": 2.0
+        "1": 37.0,
+        "2": 42.0,
+        "3": 20.0,
+        "4": 33.0,
+        "5": 37.0,
+        "6": 47.0,
+        "7": 23.0,
+        "8": 46.0,
+        "9": 49.0,
+        "10": 47.0,
+        "11": 20.0
       },
-      "total_path_length": 78.0,
-      "avg_path_length": 15.6,
-      "makespan_steps": 21,
-      "avg_travel_time_steps": 15
+      "total_path_length": 427.0,
+      "avg_path_length": 35.583333333333336,
+      "makespan_steps": 84,
+      "avg_travel_time_steps": 33.583333333333336
     },
     "safety": {
       "collision_count": 0,
-      "near_miss_count": 0,
-      "min_separation_distance": 12.727922061357855,
+      "near_miss_count": 38,
+      "min_separation_distance": 3.0,
       "safety_violation_rate": 0.0
     },
     "computational": {
-      "max_planning_time_s": 0.0003464221954345703,
-      "std_planning_time_s": 7.7484631384544e-05,
-      "total_runtime_s": 13.873287439346313
+      "max_planning_time_s": 0.1215980052947998,
+      "std_planning_time_s": 0.029085913088104112,
+      "total_runtime_s": 96.36336708068848
     },
     "congestion": {
-      "avg_active_agents_per_step": 2.9615384615384617,
-      "avg_wait_time_steps": 0.0,
-      "total_wait_steps": 0
+      "avg_active_agents_per_step": 4.825581395348837,
+      "avg_wait_time_steps": 0.6666666666666666,
+      "total_wait_steps": 8
     },
     "fairness": {
-      "travel_time_variance": 0,
+      "travel_time_variance": 121.53787878787878,
       "travel_times_per_plane": {
-        "2": 15
+        "0": 24,
+        "3": 18,
+        "1": 35,
+        "4": 31,
+        "2": 40,
+        "7": 21,
+        "5": 35,
+        "11": 18,
+        "6": 45,
+        "8": 44,
+        "9": 47,
+        "10": 45
       }
     }
   },
@@ -40,36 +58,54 @@
     "efficiency": {
       "path_length_per_plane": {
         "0": 26.0,
-        "1": 22.0,
-        "2": 17.0,
-        "3": 11.0,
-        "4": 2.0
+        "1": 37.0,
+        "2": 38.0,
+        "3": 20.0,
+        "4": 29.0,
+        "5": 37.0,
+        "6": 47.0,
+        "7": 21.0,
+        "8": 44.0,
+        "9": 47.0,
+        "10": 45.0,
+        "11": 20.0
       },
-      "total_path_length": 78.0,
-      "avg_path_length": 15.6,
-      "makespan_steps": 21,
-      "avg_travel_time_steps": 15
+      "total_path_length": 411.0,
+      "avg_path_length": 34.25,
+      "makespan_steps": 82,
+      "avg_travel_time_steps": 32.333333333333336
     },
     "safety": {
-      "collision_count": 0,
-      "near_miss_count": 0,
-      "min_separation_distance": 12.727922061357855,
-      "safety_violation_rate": 0.0
+      "collision_count": 1,
+      "near_miss_count": 37,
+      "min_separation_distance": 2.0,
+      "safety_violation_rate": 0.0010351966873706005
     },
     "computational": {
-      "max_planning_time_s": 0.0002288818359375,
-      "std_planning_time_s": 5.527855732374052e-05,
-      "total_runtime_s": 13.875221490859985
+      "max_planning_time_s": 0.0020072460174560547,
+      "std_planning_time_s": 0.0003077436392528087,
+      "total_runtime_s": 96.39234685897827
     },
     "congestion": {
-      "avg_active_agents_per_step": 2.9615384615384617,
-      "avg_wait_time_steps": 0.0,
-      "total_wait_steps": 0
+      "avg_active_agents_per_step": 4.761904761904762,
+      "avg_wait_time_steps": 0.08333333333333333,
+      "total_wait_steps": 1
     },
     "fairness": {
-      "travel_time_variance": 0,
+      "travel_time_variance": 112.06060606060606,
       "travel_times_per_plane": {
-        "2": 15
+        "0": 24,
+        "3": 18,
+        "1": 35,
+        "4": 28,
+        "2": 36,
+        "7": 19,
+        "5": 35,
+        "11": 18,
+        "6": 45,
+        "8": 42,
+        "9": 45,
+        "10": 43
       }
     }
   },
@@ -77,36 +113,54 @@
     "efficiency": {
       "path_length_per_plane": {
         "0": 26.0,
-        "1": 22.0,
-        "2": 17.0,
-        "3": 11.0,
-        "4": 2.0
+        "1": 37.0,
+        "2": 38.0,
+        "3": 20.0,
+        "4": 29.0,
+        "5": 37.0,
+        "6": 47.0,
+        "7": 21.0,
+        "8": 44.0,
+        "9": 47.0,
+        "10": 45.0,
+        "11": 20.0
       },
-      "total_path_length": 78.0,
-      "avg_path_length": 15.6,
-      "makespan_steps": 21,
-      "avg_travel_time_steps": 15
+      "total_path_length": 411.0,
+      "avg_path_length": 34.25,
+      "makespan_steps": 82,
+      "avg_travel_time_steps": 32.333333333333336
     },
     "safety": {
-      "collision_count": 0,
-      "near_miss_count": 0,
-      "min_separation_distance": 12.727922061357855,
-      "safety_violation_rate": 0.0
+      "collision_count": 1,
+      "near_miss_count": 37,
+      "min_separation_distance": 2.0,
+      "safety_violation_rate": 0.0010351966873706005
     },
     "computational": {
-      "max_planning_time_s": 0.0002028942108154297,
-      "std_planning_time_s": 4.919171097203279e-05,
-      "total_runtime_s": 13.876556873321533
+      "max_planning_time_s": 0.0020132064819335938,
+      "std_planning_time_s": 0.00044331811036049743,
+      "total_runtime_s": 96.39843606948853
     },
     "congestion": {
-      "avg_active_agents_per_step": 2.9615384615384617,
-      "avg_wait_time_steps": 0.0,
-      "total_wait_steps": 0
+      "avg_active_agents_per_step": 4.761904761904762,
+      "avg_wait_time_steps": 0.08333333333333333,
+      "total_wait_steps": 1
     },
     "fairness": {
-      "travel_time_variance": 0,
+      "travel_time_variance": 112.06060606060606,
       "travel_times_per_plane": {
-        "2": 15
+        "0": 24,
+        "3": 18,
+        "1": 35,
+        "4": 28,
+        "2": 36,
+        "7": 19,
+        "5": 35,
+        "11": 18,
+        "6": 45,
+        "8": 42,
+        "9": 45,
+        "10": 43
       }
     }
   }
