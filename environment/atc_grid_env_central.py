@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.transforms import Affine2D
 from matplotlib.patches import Circle
-from config.config import PLANE_RADIUS, COLLISION_RADIUS
+from config.config import PLANE_RADIUS, COLLISION_RADIUS, WARNING_RADIUS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(BASE_DIR)
@@ -30,7 +30,6 @@ print(BASE_DIR)
 # =====================================================
 
 class Scenario:
-
     def __init__(self, grid_size, max_planes, sim_time):
         self.grid_size = grid_size
         self.sim_time = sim_time
@@ -47,25 +46,41 @@ class Scenario:
         t = 0
         count = 0
 
+        # Build border positions once
+        border_positions = []
+        for i in range(grid_size):
+            border_positions.append((0, i))
+            border_positions.append((grid_size - 1, i))
+            border_positions.append((i, 0))
+            border_positions.append((i, grid_size - 1))
+
         while t < sim_time and count < max_planes:
-            t += random.uniform(0.5, 4)
+            t += random.uniform(0, 2)
 
-            border_positions = []
-            for i in range(grid_size):
-                border_positions.append((0, i))
-                border_positions.append((grid_size - 1, i))
-                border_positions.append((i, 0))
-                border_positions.append((i, grid_size - 1))
+            # Positions already claimed at this spawn time don't matter —
+            # what matters is spatial separation from all previously spawned positions
+            occupied = [pos for _, pos in self.spawn_events]
 
-            pos = random.choice(border_positions)
+            safe_positions = [
+                pos for pos in border_positions
+                if all(
+                    math.sqrt((pos[0] - opos[0])**2 + (pos[1] - opos[1])**2) >= COLLISION_RADIUS
+                    for opos in occupied
+                )
+            ]
+
+            # If the border is so crowded no safe spot exists, skip this spawn
+            if not safe_positions:
+                continue
+
+            pos = random.choice(safe_positions)
             self.spawn_events.append((t, pos))
             count += 1
-
 
 # =====================================================
 # METRICS TRACKER
 # =====================================================
-
+# TODO: Write what metrics it tracks
 class MetricsTracker:
     """
     Tracks all metrics per simulation:
@@ -265,7 +280,7 @@ class AlgoSimulation:
 
         self.plane_radius = PLANE_RADIUS
         self.collision_threshold = COLLISION_RADIUS
-        self.warning_threshold = PLANE_RADIUS * 2.5
+        self.warning_threshold = WARNING_RADIUS
 
         self.planes = []
         self.plane_counter = 0
@@ -291,7 +306,6 @@ class AlgoSimulation:
     # -------------------------------------------------
 
     def step(self, current_time):
-
         # Spawn using shared schedule
         while self.spawn_events and current_time >= self.spawn_events[0][0]:
             _, pos = self.spawn_events.pop(0)

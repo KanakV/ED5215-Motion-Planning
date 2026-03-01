@@ -1,0 +1,31 @@
+.
+├── algorithm_comparison_table.csv
+├── algorithms
+│   ├── cbs.py
+│   └── README_cbs.md
+├── config
+│   └── config.py
+├── main.py
+├── map
+│   ├── atc_grid_env_central.py
+│   ├── atc_grid_env.py
+│   └── resources
+│       ├── background.jpg
+│       ├── plane.png
+│       └── runway.png
+├── output.txt
+├── planner.py
+├── README.md
+├── references
+│   ├── Kottinger_CBS_with_kinodynamic_constriants.pdf
+│   └── Sharon_CBS.pdf
+├── results
+│   ├── metrics.json
+│   ├── metrics_summary.csv
+│   └── simulation
+│       ├── algorithm_a_replay.json
+│       ├── algorithm_b_replay.json
+│       └── algorithm_c_replay.json
+└── structure.txt
+
+7 directories, 21 files
