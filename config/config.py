@@ -12,3 +12,11 @@ MAX_NODES = 600
 RUNWAY_START = (GRID_SIZE // 2, GRID_SIZE - 1)
 RUNWAY_END = (GRID_SIZE // 2, GRID_SIZE - 5)
 SPAWN_FREQUENCUY = 1
+
+# LRA Config
+LOOKAHEAD = 8              # slightly larger horizon
+WAIT_ALLOWED = True
+
+GOAL_WEIGHT = 1.2          # bias toward runway
+CONFLICT_PENALTY = 3       # soft penalty instead of hard block
+INERTIA_BONUS = 0.3        # reward continuing direction

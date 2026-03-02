@@ -31,6 +31,7 @@ print(BASE_DIR)
 
 class Scenario:
     def __init__(self, grid_size, max_planes, sim_time):
+
         self.grid_size = grid_size
         self.sim_time = sim_time
 
@@ -40,7 +41,6 @@ class Scenario:
             random.randint(grid_size // 4, 3 * grid_size // 4)
         )
 
-        # Pre-generate spawn events (time + position)
         self.spawn_events = []
 
         t = 0
@@ -75,6 +75,12 @@ class Scenario:
 
             pos = random.choice(safe_positions)
             self.spawn_events.append((t, pos))
+
+            # # Maintain small memory window of used spawn points
+            # recent_spawns.append(pos)
+            # if len(recent_spawns) > 5:
+            #     recent_spawns.pop(0)
+
             count += 1
 
 # =====================================================
