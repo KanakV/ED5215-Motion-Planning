@@ -2,361 +2,184 @@
   "Cooperative": {
     "efficiency": {
       "path_length_per_plane": {
-        "0": 14.0,
-        "1": 27.0,
-        "2": 22.0,
-        "3": 53.0,
-        "4": 22.0,
-        "5": 31.0,
-        "6": 59.0,
-        "7": 29.0,
-        "8": 52.0,
-        "9": 21.0,
-        "10": 48.0,
-        "11": 38.0,
-        "12": 57.0,
-        "13": 28.0,
-        "14": 56.0
+        "0": 10.0,
+        "1": 5.0
       },
-      "total_path_length": 557.0,
-      "avg_path_length": 37.13333333333333,
-      "makespan_steps": 75,
-      "avg_travel_time_steps": 35.13333333333333
+      "total_path_length": 15.0,
+      "avg_path_length": 7.5,
+      "makespan_s": 0,
+      "avg_travel_time_s": 0,
+      "travel_time_per_plane_s": {}
     },
     "safety": {
       "collision_count": 0,
-      "near_miss_count": 41,
-      "min_separation_distance": 1.0,
+      "near_miss_count": 0,
+      "min_separation_distance": 16.64331697709324,
       "safety_violation_rate": 0.0
     },
     "computational": {
-      "max_planning_time_s": 0.34969162940979004,
-      "std_planning_time_s": 0.0953156779737179,
-      "total_runtime_s": 91.33642292022705
+      "max_planning_time_s": 0.02094125747680664,
+      "p95_planning_time_s": 0.01583186388015746,
+      "std_planning_time_s": 0.005508015374408711,
+      "total_runtime_s": 5.396633863449097,
+      "avg_planning_time_spawn_step_s": 0.006136059761047363,
+      "avg_planning_time_non_spawn_step_s": 0.007750153541564941
     },
     "congestion": {
-      "avg_active_agents_per_step": 7.038961038961039,
-      "avg_wait_time_steps": 0.06666666666666667,
-      "total_wait_steps": 1
+      "avg_active_agents_per_step": 1.5,
+      "avg_wait_time_steps": 0.0,
+      "total_wait_steps": 0
     },
     "fairness": {
-      "travel_time_variance": 240.26666666666668,
-      "travel_times_per_plane": {
-        "0": 12,
-        "2": 20,
-        "1": 25,
-        "4": 20,
-        "9": 19,
-        "7": 27,
-        "5": 29,
-        "13": 26,
-        "11": 36,
-        "3": 51,
-        "10": 46,
-        "8": 50,
-        "6": 57,
-        "12": 55,
-        "14": 54
+      "travel_time_variance": 0
+    },
+    "throughput": {
+      "planes_per_second": 0.0
+    },
+    "path_quality": {
+      "avg_direction_changes": 0.5,
+      "direction_changes_per_plane": {
+        "0": 0,
+        "1": 1
       }
     },
+    "completion": {
+      "planes_spawned": 2,
+      "planes_landed": 0,
+      "completion_rate": 0.0
+    },
     "normalised": {
-      "avg_detour_ratio": 1.0415864405908715,
-      "detour_ratio_per_plane": {
-        "0": 1.0769230769230769,
-        "2": 1.0476190476190477,
-        "1": 1.0384615384615385,
-        "4": 1.0476190476190477,
-        "9": 1.1666666666666667,
-        "7": 1.0357142857142858,
-        "5": 1.0333333333333334,
-        "13": 1.037037037037037,
-        "11": 1.027027027027027,
-        "3": 1.0192307692307692,
-        "10": 1.0212765957446808,
-        "8": 1.0196078431372548,
-        "6": 1.0172413793103448,
-        "12": 1.0178571428571428,
-        "14": 1.018181818181818
-      },
-      "avg_norm_travel_time": 0.9732283742239434,
-      "norm_travel_time_per_plane": {
-        "0": 0.9230769230769231,
-        "2": 0.9523809523809523,
-        "1": 0.9615384615384616,
-        "4": 0.9523809523809523,
-        "9": 1.0555555555555556,
-        "7": 0.9642857142857143,
-        "5": 0.9666666666666667,
-        "13": 0.9629629629629629,
-        "11": 0.972972972972973,
-        "3": 0.9807692307692307,
-        "10": 0.9787234042553191,
-        "8": 0.9803921568627451,
-        "6": 0.9827586206896551,
-        "12": 0.9821428571428571,
-        "14": 0.9818181818181818
-      },
-      "avg_planning_time_per_agent_s": 0.006246251178844898,
-      "max_planning_time_per_agent_s": 0.024977973529270718,
-      "avg_wait_ratio": 0.003508771929824561,
-      "wait_ratio_per_plane": {
-        "0": 0.0,
-        "2": 0.0,
-        "1": 0.0,
-        "4": 0.0,
-        "9": 0.05263157894736842,
-        "7": 0.0,
-        "5": 0.0,
-        "13": 0.0,
-        "11": 0.0,
-        "3": 0.0,
-        "10": 0.0,
-        "8": 0.0,
-        "6": 0.0,
-        "12": 0.0,
-        "14": 0.0
-      },
-      "detour_ratio_cv": 0.036657822439646194
+      "avg_detour_ratio": 0,
+      "detour_ratio_per_plane": {},
+      "avg_norm_travel_time": 0,
+      "norm_travel_time_per_plane": {},
+      "avg_planning_time_per_agent_s": 0.005358660221099853,
+      "max_planning_time_per_agent_s": 0.02094125747680664,
+      "avg_wait_ratio": 0,
+      "wait_ratio_per_plane": {},
+      "detour_ratio_cv": 0
     }
   },
   "Long Range A*": {
     "efficiency": {
       "path_length_per_plane": {
-        "0": 14.0,
-        "1": 27.0,
-        "2": 22.0,
-        "3": 53.0,
-        "4": 22.0,
-        "5": 31.0,
-        "6": 59.0,
-        "7": 29.0,
-        "8": 52.0,
-        "9": 21.0,
-        "10": 48.0,
-        "11": 38.0,
-        "12": 57.0,
-        "13": 28.0,
-        "14": 56.0
+        "0": 10.0,
+        "1": 5.0
       },
-      "total_path_length": 557.0,
-      "avg_path_length": 37.13333333333333,
-      "makespan_steps": 75,
-      "avg_travel_time_steps": 35.13333333333333
+      "total_path_length": 15.0,
+      "avg_path_length": 7.5,
+      "makespan_s": 0,
+      "avg_travel_time_s": 0,
+      "travel_time_per_plane_s": {}
     },
     "safety": {
       "collision_count": 0,
-      "near_miss_count": 44,
-      "min_separation_distance": 1.0,
+      "near_miss_count": 0,
+      "min_separation_distance": 11.180339887498949,
       "safety_violation_rate": 0.0
     },
     "computational": {
-      "max_planning_time_s": 0.0015654563903808594,
-      "std_planning_time_s": 0.00045713811272277924,
-      "total_runtime_s": 91.35410165786743
+      "max_planning_time_s": 0.00013399124145507812,
+      "p95_planning_time_s": 0.00012948513031005857,
+      "std_planning_time_s": 3.596654877166253e-05,
+      "total_runtime_s": 5.4053614139556885,
+      "avg_planning_time_spawn_step_s": 9.608268737792969e-05,
+      "avg_planning_time_non_spawn_step_s": 8.991360664367676e-05
     },
     "congestion": {
-      "avg_active_agents_per_step": 7.038961038961039,
-      "avg_wait_time_steps": 0.06666666666666667,
-      "total_wait_steps": 1
+      "avg_active_agents_per_step": 1.5,
+      "avg_wait_time_steps": 0.0,
+      "total_wait_steps": 0
     },
     "fairness": {
-      "travel_time_variance": 240.26666666666668,
-      "travel_times_per_plane": {
-        "0": 12,
-        "2": 20,
-        "1": 25,
-        "4": 20,
-        "9": 19,
-        "7": 27,
-        "5": 29,
-        "13": 26,
-        "11": 36,
-        "3": 51,
-        "10": 46,
-        "8": 50,
-        "6": 57,
-        "12": 55,
-        "14": 54
+      "travel_time_variance": 0
+    },
+    "throughput": {
+      "planes_per_second": 0.0
+    },
+    "path_quality": {
+      "avg_direction_changes": 0,
+      "direction_changes_per_plane": {
+        "0": 0,
+        "1": 0
       }
     },
+    "completion": {
+      "planes_spawned": 2,
+      "planes_landed": 0,
+      "completion_rate": 0.0
+    },
     "normalised": {
-      "avg_detour_ratio": 1.0415864405908715,
-      "detour_ratio_per_plane": {
-        "0": 1.0769230769230769,
-        "2": 1.0476190476190477,
-        "1": 1.0384615384615385,
-        "4": 1.0476190476190477,
-        "9": 1.1666666666666667,
-        "7": 1.0357142857142858,
-        "5": 1.0333333333333334,
-        "13": 1.037037037037037,
-        "11": 1.027027027027027,
-        "3": 1.0192307692307692,
-        "10": 1.0212765957446808,
-        "8": 1.0196078431372548,
-        "6": 1.0172413793103448,
-        "12": 1.0178571428571428,
-        "14": 1.018181818181818
-      },
-      "avg_norm_travel_time": 0.9732283742239434,
-      "norm_travel_time_per_plane": {
-        "0": 0.9230769230769231,
-        "2": 0.9523809523809523,
-        "1": 0.9615384615384616,
-        "4": 0.9523809523809523,
-        "9": 1.0555555555555556,
-        "7": 0.9642857142857143,
-        "5": 0.9666666666666667,
-        "13": 0.9629629629629629,
-        "11": 0.972972972972973,
-        "3": 0.9807692307692307,
-        "10": 0.9787234042553191,
-        "8": 0.9803921568627451,
-        "6": 0.9827586206896551,
-        "12": 0.9821428571428571,
-        "14": 0.9818181818181818
-      },
-      "avg_planning_time_per_agent_s": 8.37167738710691e-05,
-      "max_planning_time_per_agent_s": 0.00020122528076171875,
-      "avg_wait_ratio": 0.003508771929824561,
-      "wait_ratio_per_plane": {
-        "0": 0.0,
-        "2": 0.0,
-        "1": 0.0,
-        "4": 0.0,
-        "9": 0.05263157894736842,
-        "7": 0.0,
-        "5": 0.0,
-        "13": 0.0,
-        "11": 0.0,
-        "3": 0.0,
-        "10": 0.0,
-        "8": 0.0,
-        "6": 0.0,
-        "12": 0.0,
-        "14": 0.0
-      },
-      "detour_ratio_cv": 0.036657822439646194
+      "avg_detour_ratio": 0,
+      "detour_ratio_per_plane": {},
+      "avg_norm_travel_time": 0,
+      "norm_travel_time_per_plane": {},
+      "avg_planning_time_per_agent_s": 5.9998035430908204e-05,
+      "max_planning_time_per_agent_s": 6.842613220214844e-05,
+      "avg_wait_ratio": 0,
+      "wait_ratio_per_plane": {},
+      "detour_ratio_cv": 0
     }
   },
   "CBS": {
     "efficiency": {
       "path_length_per_plane": {
-        "0": 14.0,
-        "1": 27.0,
-        "2": 30.0,
-        "3": 53.0,
-        "4": 22.0,
-        "5": 33.0,
-        "6": 59.0,
-        "7": 29.0,
-        "8": 52.0,
-        "9": 21.0,
-        "10": 48.0,
-        "11": 38.0,
-        "12": 57.0,
-        "13": 28.0,
-        "14": 56.0
+        "0": 10.0,
+        "1": 5.0
       },
-      "total_path_length": 567.0,
-      "avg_path_length": 37.8,
-      "makespan_steps": 75,
-      "avg_travel_time_steps": 35.8
+      "total_path_length": 15.0,
+      "avg_path_length": 7.5,
+      "makespan_s": 0,
+      "avg_travel_time_s": 0,
+      "travel_time_per_plane_s": {}
     },
     "safety": {
       "collision_count": 0,
-      "near_miss_count": 31,
-      "min_separation_distance": 1.0,
+      "near_miss_count": 0,
+      "min_separation_distance": 16.64331697709324,
       "safety_violation_rate": 0.0
     },
     "computational": {
-      "max_planning_time_s": 1.9806153774261475,
-      "std_planning_time_s": 0.5379363711481291,
-      "total_runtime_s": 91.37039232254028
+      "max_planning_time_s": 0.02105545997619629,
+      "p95_planning_time_s": 0.012804126739501934,
+      "std_planning_time_s": 0.006040450787941244,
+      "total_runtime_s": 5.4057416915893555,
+      "avg_planning_time_spawn_step_s": 0.0023169517517089844,
+      "avg_planning_time_non_spawn_step_s": 0.0043020546436309814
     },
     "congestion": {
-      "avg_active_agents_per_step": 7.1688311688311686,
-      "avg_wait_time_steps": 0.4,
-      "total_wait_steps": 6
+      "avg_active_agents_per_step": 1.5,
+      "avg_wait_time_steps": 0.0,
+      "total_wait_steps": 0
     },
     "fairness": {
-      "travel_time_variance": 225.6,
-      "travel_times_per_plane": {
-        "0": 12,
-        "1": 25,
-        "4": 20,
-        "9": 19,
-        "2": 28,
-        "7": 27,
-        "5": 31,
-        "13": 26,
-        "11": 36,
-        "3": 51,
-        "10": 46,
-        "8": 50,
-        "6": 57,
-        "12": 55,
-        "14": 54
+      "travel_time_variance": 0
+    },
+    "throughput": {
+      "planes_per_second": 0.0
+    },
+    "path_quality": {
+      "avg_direction_changes": 0.5,
+      "direction_changes_per_plane": {
+        "0": 0,
+        "1": 1
       }
     },
+    "completion": {
+      "planes_spawned": 2,
+      "planes_landed": 0,
+      "completion_rate": 0.0
+    },
     "normalised": {
-      "avg_detour_ratio": 1.0714277104321412,
-      "detour_ratio_per_plane": {
-        "0": 1.0769230769230769,
-        "1": 1.0384615384615385,
-        "4": 1.0476190476190477,
-        "9": 1.1666666666666667,
-        "2": 1.4285714285714286,
-        "7": 1.0357142857142858,
-        "5": 1.1,
-        "13": 1.037037037037037,
-        "11": 1.027027027027027,
-        "3": 1.0192307692307692,
-        "10": 1.0212765957446808,
-        "8": 1.0196078431372548,
-        "6": 1.0172413793103448,
-        "12": 1.0178571428571428,
-        "14": 1.018181818181818
-      },
-      "avg_norm_travel_time": 1.0030696440652132,
-      "norm_travel_time_per_plane": {
-        "0": 0.9230769230769231,
-        "1": 0.9615384615384616,
-        "4": 0.9523809523809523,
-        "9": 1.0555555555555556,
-        "2": 1.3333333333333333,
-        "7": 0.9642857142857143,
-        "5": 1.0333333333333334,
-        "13": 0.9629629629629629,
-        "11": 0.972972972972973,
-        "3": 0.9807692307692307,
-        "10": 0.9787234042553191,
-        "8": 0.9803921568627451,
-        "6": 0.9827586206896551,
-        "12": 0.9821428571428571,
-        "14": 0.9818181818181818
-      },
-      "avg_planning_time_per_agent_s": 0.06933053674567873,
-      "max_planning_time_per_agent_s": 0.18005594340237704,
-      "avg_wait_ratio": 0.015183119088042686,
-      "wait_ratio_per_plane": {
-        "0": 0.0,
-        "1": 0.0,
-        "4": 0.0,
-        "9": 0.05263157894736842,
-        "2": 0.14285714285714285,
-        "7": 0.0,
-        "5": 0.03225806451612903,
-        "13": 0.0,
-        "11": 0.0,
-        "3": 0.0,
-        "10": 0.0,
-        "8": 0.0,
-        "6": 0.0,
-        "12": 0.0,
-        "14": 0.0
-      },
-      "detour_ratio_cv": 0.09981437194591393
+      "avg_detour_ratio": 0,
+      "detour_ratio_per_plane": {},
+      "avg_norm_travel_time": 0,
+      "norm_travel_time_per_plane": {},
+      "avg_planning_time_per_agent_s": 0.003349912166595459,
+      "max_planning_time_per_agent_s": 0.02105545997619629,
+      "avg_wait_ratio": 0,
+      "wait_ratio_per_plane": {},
+      "detour_ratio_cv": 0
     }
   }
 }

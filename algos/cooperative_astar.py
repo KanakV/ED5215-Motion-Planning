@@ -1,56 +1,67 @@
+"""
+Cooperative A* Planner
+========================
+Sequential (prioritised) multi-agent planner.
+
+Agents are sorted by Manhattan distance to goal (closest first) and planned
+one at a time.  Each planned path is inserted into a shared reservation table
+so later agents route around earlier ones.
+
+Low-level planner: spacetime_astar(..., grid=grid, reservations=...).
+"""
+
+from typing import Dict, List, Tuple
+
+from algos.spacetime_astar import spacetime_astar
 from algos.algo_helpers import manhattan
-from algos.spacetime_astar import space_time_astar
 
-# ------------------------------------------------------------
-# Cooperative A* Planner
-# ------------------------------------------------------------
-def cooperative_planner(grid, active_planes, goal):
+Pos = Tuple[int, int]
 
-    actions = {}
 
-    # Reservation structure
+def cooperative_planner(
+    grid,
+    active_planes: List[Dict],
+    goal: Pos,
+) -> Dict[int, Pos]:
+    """
+    Plan one step for every active plane and return {agent_id: next_pos}.
+
+    Uses a shared reservation table (vertices + edges) built up as each
+    agent's full space-time path is committed in priority order.
+    """
+    actions: Dict[int, Pos] = {}
+
+    # Shared reservation table (file-2 style)
     reservations = {
-        "vertices": set(),
-        "edges": set()
+        "vertices": set(),   # (x, y, t)
+        "edges":    set(),   # (nx, ny, px, py, t)  — swap conflicts
     }
 
-    # -------------------------------------------------
-    #  Distance-based priority
-    # -------------------------------------------------
-    sorted_planes = sorted(
-        active_planes,
-        key=lambda p: manhattan(p["pos"], goal)
-    )
+    # Sort closest-to-goal first so they get right-of-way
+    sorted_planes = sorted(active_planes, key=lambda p: manhattan(p["pos"], goal))
 
-    # -------------------------------------------------
-    #  Plan sequentially
-    # -------------------------------------------------
     for plane in sorted_planes:
-
-        pid = plane["id"]
+        pid   = plane["id"]
         start = plane["pos"]
 
-        path = space_time_astar(
-            grid,
+        path = spacetime_astar(
             start,
             goal,
-            reservations
+            grid=grid,
+            reservations=reservations,
         )
 
         if path is None or len(path) < 2:
+            # No path found — agent stays put this step
             actions[pid] = start
             continue
 
-        next_pos = path[1]
-        actions[pid] = next_pos
+        actions[pid] = path[1]
 
-        # -------------------------------------------------
-        #  Reserve full path in space-time
-        # -------------------------------------------------
-        for t in range(len(path)):
-            x, y = path[t]
+        # Commit the full path into the reservation table so subsequent
+        # agents route around this one
+        for t, (x, y) in enumerate(path):
             reservations["vertices"].add((x, y, t))
-
             if t > 0:
                 px, py = path[t - 1]
                 reservations["edges"].add((px, py, x, y, t))

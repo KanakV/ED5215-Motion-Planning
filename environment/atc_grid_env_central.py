@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.transforms import Affine2D
 from matplotlib.patches import Circle
-from config.config import PLANE_RADIUS, COLLISION_RADIUS, WARNING_RADIUS
+from config.config import PLANE_RADIUS, COLLISION_RADIUS, WARNING_RADIUS, RUNWAY
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(BASE_DIR)
@@ -22,31 +22,30 @@ SIMULATION_LOG_DIR = os.path.join(RESULTS_DIR, "simulation")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(SIMULATION_LOG_DIR, exist_ok=True)
 
-print(BASE_DIR)
-
 
 # =====================================================
 # SCENARIO (Shared Random Scenario Per Run)
 # =====================================================
 
+# Random Runway
+#   Make Fixed Runway
+# Planes spawned at border within  arange of (0-2) seconds from previous spawns
+#   Make uniform spawn rate? 
+# Max number of planes defined in config.py
+
 class Scenario:
     def __init__(self, grid_size, max_planes, sim_time):
 
         self.grid_size = grid_size
-        self.sim_time = sim_time
+        self.sim_time  = sim_time
 
-        # Random runway
-        self.runway = (
-            random.randint(grid_size // 4, 3 * grid_size // 4),
-            random.randint(grid_size // 4, 3 * grid_size // 4)
-        )
+        self.runway = RUNWAY
 
         self.spawn_events = []
 
-        t = 0
+        t     = 0
         count = 0
 
-        # Build border positions once
         border_positions = []
         for i in range(grid_size):
             border_positions.append((0, i))
@@ -57,9 +56,7 @@ class Scenario:
         while t < sim_time and count < max_planes:
             t += random.uniform(0, 2)
 
-            # Positions already claimed at this spawn time don't matter —
-            # what matters is spatial separation from all previously spawned positions
-            occupied = [pos for _, pos in self.spawn_events]
+            occupied = [pos for _, pos, _ in self.spawn_events]
 
             safe_positions = [
                 pos for pos in border_positions
@@ -69,65 +66,93 @@ class Scenario:
                 )
             ]
 
-            # If the border is so crowded no safe spot exists, skip this spawn
             if not safe_positions:
                 continue
 
-            pos = random.choice(safe_positions)
-            self.spawn_events.append((t, pos))
+            pos   = random.choice(safe_positions)
+            color = np.random.rand(3,).tolist()   # one color per plane id, decided here
 
-            # # Maintain small memory window of used spawn points
-            # recent_spawns.append(pos)
-            # if len(recent_spawns) > 5:
-            #     recent_spawns.pop(0)
-
+            self.spawn_events.append((t, pos, color))
             count += 1
+
+    # Convenience: color lookup by plane_id (index into spawn_events)
+    def color_for(self, plane_id: int) -> list:
+        return self.spawn_events[plane_id][2]
 
 # =====================================================
 # METRICS TRACKER
 # =====================================================
 # TODO: Write what metrics it tracks
+import time
+import math
+import statistics
+import numpy as np
+
+
+# =====================================================
+# METRICS TRACKER
+# =====================================================
 class MetricsTracker:
     """
-    Tracks all metrics per simulation:
-      Efficiency      : path length per plane, total path length, makespan, avg travel time
-                        NORMALISED: detour ratio (path / manhattan), normalised travel time
-      Safety          : collision count, near miss count, min separation, safety violation rate
-      Computational   : max/std planning time, total runtime
-                        NORMALISED: planning time per active agent
-      Congestion      : avg active agents per step, wait time per plane
-                        NORMALISED: wait ratio (wait_steps / travel_time) per plane
-      Fairness        : variance of travel time
-                        NORMALISED: coefficient of variation of detour ratios
+    Tracks all metrics per simulation run.
+
+    Categories
+    ----------
+    Efficiency      : path length per plane, total path length, makespan,
+                      avg travel time (in real sim-time seconds, accounting
+                      for staggered spawns)
+                      NORMALISED: detour_ratio (path / manhattan),
+                                  norm_travel_time (travel_time / manhattan)
+
+    Safety          : collision count, near-miss count, min separation,
+                      safety violation rate
+
+    Computational   : max / p95 / std planning time, total runtime,
+                      spawn-step vs non-spawn-step planning time
+                      NORMALISED: planning_time_per_agent
+
+    Congestion      : avg active agents per step, wait time per plane
+                      NORMALISED: wait_ratio (wait_steps / travel_steps)
+
+    Fairness        : variance of travel time,
+                      coefficient of variation of detour ratios
+
+    Throughput      : planes landed per second of real sim time
+
+    Path Quality    : avg direction changes per plane (smoothness)
+
+    Completion      : how many planes actually landed vs spawned
     """
 
     def __init__(self, collision_threshold, warning_threshold, runway, grid_size):
         self.collision_threshold = collision_threshold
         self.warning_threshold   = warning_threshold
-        self.runway              = runway       # (row, col) — needed for Manhattan baseline
-        self.grid_size           = grid_size    # needed to cap/validate baselines
+        self.runway              = runway
+        self.grid_size           = grid_size
 
         # Per-step records
-        self.planning_times     = []            # raw compute time each step
-        self.active_counts      = []            # active plane count each step
-        self.planning_agents    = []            # how many agents were active during planning
+        self.planning_times      = []   # (sim_time, compute_s, n_agents, is_spawn_step)
+        self.active_counts       = []
 
         # Per-plane records  {plane_id: value}
-        self.plane_spawn_step   = {}
-        self.plane_land_step    = {}
-        self.plane_wait_steps   = {}
-        self.plane_spawn_pos    = {}            # (row, col) at spawn — for Manhattan baseline
+        self.plane_spawn_time    = {}   # real sim-time when plane first appeared
+        self.plane_land_time     = {}   # real sim-time when plane landed
+        self.plane_spawn_pos     = {}   # (row, col) at spawn — for Manhattan baseline
+        self.plane_wait_steps    = {}   # steps where plane didn't move
+        self.plane_travel_steps  = {}   # total steps plane was active
+        self.plane_prev_dir      = {}   # previous direction vector for smoothness
+        self.plane_dir_changes   = {}   # count of direction changes
 
         # Safety counters
-        self.collision_count    = 0
-        self.near_miss_count    = 0
-        self.min_separation     = float("inf")
-        self.total_pair_steps   = 0
-        self.violation_steps    = 0
+        self.collision_count     = 0
+        self.near_miss_count     = 0
+        self.min_separation      = float("inf")
+        self.total_pair_steps    = 0
+        self.violation_steps     = 0
 
         # Timing
-        self.wall_start = None
-        self.wall_end   = None
+        self.wall_start          = None
+        self.wall_end            = None
 
         self._step_index              = 0
         self._collisions_this_step    = set()
@@ -152,27 +177,61 @@ class MetricsTracker:
         self.wall_end = time.time()
 
     # ------------------------------------------------------------------
+    # Spawn registration
+    # ------------------------------------------------------------------
+
+    def register_spawn(self, plane_id: int, pos: tuple, sim_time: float):
+        """
+        Call this exactly once per plane at the moment it spawns,
+        passing the real simulation time. This is what fixes staggered
+        spawn timing — travel time will be (land_time - spawn_time) in
+        real sim-time seconds, not steps.
+        """
+        self.plane_spawn_time[plane_id] = sim_time
+        self.plane_spawn_pos[plane_id]  = pos
+        self.plane_wait_steps[plane_id] = 0
+        self.plane_travel_steps[plane_id] = 0
+        self.plane_dir_changes[plane_id]  = 0
+        self.plane_prev_dir[plane_id]     = None
+
+    # ------------------------------------------------------------------
     # Per-step recording
     # ------------------------------------------------------------------
 
-    def record_step(self, planning_time, active_planes, prev_positions):
+    def record_step(self, planning_time: float, sim_time: float,
+                    active_planes: list, prev_positions: dict,
+                    is_spawn_step: bool = False):
         """
         Call once per simulation step AFTER moves have been applied.
 
+        planning_time  : wall-clock seconds spent in the planner this step
+        sim_time       : current simulation time
         active_planes  : list of active plane dicts (with updated pos)
         prev_positions : dict {plane_id: pos_before_move}
+        is_spawn_step  : True if at least one plane spawned this step
         """
         self._step_index += 1
-        self.planning_times.append(planning_time)
+        self.planning_times.append((sim_time, planning_time, len(active_planes), is_spawn_step))
         self.active_counts.append(len(active_planes))
-        self.planning_agents.append(len(active_planes))
 
-        # Spawn tracking
+        # Per-plane travel step + smoothness tracking
         for p in active_planes:
-            pid = p["id"]
-            if pid not in self.plane_spawn_step:
-                self.plane_spawn_step[pid] = self._step_index
-                self.plane_spawn_pos[pid]  = p["pos"]   # position at first sighting
+            pid      = p["id"]
+            prev_pos = prev_positions.get(pid)
+            curr_pos = p["pos"]
+
+            self.plane_travel_steps[pid] = self.plane_travel_steps.get(pid, 0) + 1
+
+            if prev_pos is not None and prev_pos != curr_pos:
+                dx = curr_pos[0] - prev_pos[0]
+                dy = curr_pos[1] - prev_pos[1]
+                new_dir = (dx, dy)
+
+                prev_dir = self.plane_prev_dir.get(pid)
+                if prev_dir is not None and new_dir != prev_dir:
+                    self.plane_dir_changes[pid] = self.plane_dir_changes.get(pid, 0) + 1
+
+                self.plane_prev_dir[pid] = new_dir
 
         # Safety checks
         self._collisions_this_step  = set()
@@ -204,82 +263,100 @@ class MetricsTracker:
                         self._near_misses_this_step.add(pair)
                         self.near_miss_count += 1
 
-    def record_landing(self, plane_id):
-        self.plane_land_step[plane_id] = self._step_index
+    def record_landing(self, plane_id: int, sim_time: float):
+        """Pass the real sim-time at landing, not a step index."""
+        self.plane_land_time[plane_id] = sim_time
 
-    def record_wait(self, plane_id):
+    def record_wait(self, plane_id: int):
+        """Call when a plane did not move this step."""
         self.plane_wait_steps[plane_id] = self.plane_wait_steps.get(plane_id, 0) + 1
 
     # ------------------------------------------------------------------
     # Compute all metrics
     # ------------------------------------------------------------------
 
-    def compute(self, planes):
+    def compute(self, planes: list) -> dict:
         """
         Returns a dict of raw + normalised metrics.
 
-        Normalisation strategy
-        ----------------------
-        Efficiency
-          detour_ratio          = path_length / manhattan_to_runway
-                                  1.0 = perfect straight-line path
-                                  >1  = how many times longer than optimal
+        Travel time fix
+        ---------------
+        travel_time = plane_land_time[pid] - plane_spawn_time[pid]
 
-          norm_travel_time      = travel_time_steps / manhattan_to_runway
-                                  1.0 = landed in the theoretical minimum steps
+        Both are in real simulation-time seconds. This correctly accounts
+        for staggered spawns — a plane that spawns at t=1.8 and lands at
+        t=9.2 has travel_time=7.4s, not inflated by how long earlier planes
+        have been flying.
 
-        Computational
-          planning_time_per_agent = planning_time_s / n_active_agents
-                                  Isolates algorithmic cost from problem size
+        Normalisation
+        -------------
+        detour_ratio          = path_length / manhattan_to_runway
+                                1.0 = flew the shortest possible path
 
-        Congestion
-          wait_ratio            = wait_steps / travel_time_steps  (per plane)
-                                  0.0 = never waited, 1.0 = entire trip was waiting
+        norm_travel_time      = travel_time_s / manhattan_to_runway
+                                Seconds per unit of Manhattan distance.
+                                Compare across planes that spawned at
+                                different distances from the runway.
 
-        Fairness
-          detour_ratio_cv       = std(detour_ratios) / mean(detour_ratios)
-                                  Coefficient of variation — 0 = perfectly fair
-                                  Controls for planes spawning at different distances
+        planning_time_per_agent = planning_time_s / n_active_agents
+                                Isolates algorithm cost from fleet size.
+
+        wait_ratio            = wait_steps / travel_steps
+                                0.0 = never waited, 1.0 = entire trip waiting
+
+        detour_ratio_cv       = std(detour_ratios) / mean(detour_ratios)
+                                0.0 = all planes got equally efficient paths
         """
 
-        # ── Per-plane baselines ───────────────────────────────────────────
-        manhattan = {
-            p["id"]: self._manhattan_to_runway(
-                self.plane_spawn_pos.get(p["id"], p["pos"])
-            )
-            for p in planes
-        }
+        landed_ids  = set(self.plane_land_time.keys())
+        all_ids     = {p["id"] for p in planes}
+        spawned_ids = set(self.plane_spawn_time.keys())
 
         path_lengths = {p["id"]: p["path_length"] for p in planes}
 
-        # ── Travel times (only landed planes) ────────────────────────────
+        # ── Per-plane baselines ───────────────────────────────────────────
+        manhattan = {
+            pid: self._manhattan_to_runway(self.plane_spawn_pos[pid])
+            for pid in spawned_ids
+        }
+
+        # ── Travel times — real sim-time seconds, stagger-corrected ──────
         travel_times      = {}
         norm_travel_times = {}
         detour_ratios     = {}
         wait_ratios       = {}
 
-        for pid, land in self.plane_land_step.items():
-            spawn        = self.plane_spawn_step.get(pid, 1)
-            travel_t     = max(1, land - spawn)
-            manhattan_d  = manhattan.get(pid, 1)
-            path_len     = path_lengths.get(pid, manhattan_d)
-            wait_s       = self.plane_wait_steps.get(pid, 0)
+        for pid in landed_ids:
+            if pid not in self.plane_spawn_time:
+                continue
+
+            travel_t    = max(1e-6, self.plane_land_time[pid] - self.plane_spawn_time[pid])
+            manhattan_d = manhattan.get(pid, 1)
+            path_len    = path_lengths.get(pid, manhattan_d)
+            wait_s      = self.plane_wait_steps.get(pid, 0)
+            travel_st   = max(1, self.plane_travel_steps.get(pid, 1))
 
             travel_times[pid]      = travel_t
             norm_travel_times[pid] = travel_t / manhattan_d
             detour_ratios[pid]     = path_len / manhattan_d
-            wait_ratios[pid]       = wait_s   / travel_t
+            wait_ratios[pid]       = wait_s   / travel_st
 
         # ── Efficiency ───────────────────────────────────────────────────
         total_path      = sum(path_lengths.values())
         avg_path        = total_path / len(planes) if planes else 0
-        avg_detour      = statistics.mean(detour_ratios.values())     if detour_ratios else 0
+
+        avg_detour      = statistics.mean(detour_ratios.values())     if detour_ratios     else 0
         avg_norm_travel = statistics.mean(norm_travel_times.values()) if norm_travel_times else 0
 
-        makespan        = (
-            max(self.plane_land_step.values()) - min(self.plane_spawn_step.values())
-            if self.plane_land_step else 0
-        )
+        # Makespan: first spawn to last landing, in real sim-time seconds
+        if self.plane_land_time and self.plane_spawn_time:
+            makespan = (
+                max(self.plane_land_time.values()) -
+                min(self.plane_spawn_time.values())
+            )
+        else:
+            makespan = 0
+
         avg_travel_time = statistics.mean(travel_times.values()) if travel_times else 0
 
         # ── Safety ───────────────────────────────────────────────────────
@@ -290,27 +367,40 @@ class MetricsTracker:
         min_sep = self.min_separation if self.min_separation != float("inf") else None
 
         # ── Computational ────────────────────────────────────────────────
-        max_planning = max(self.planning_times) if self.planning_times else 0
-        std_planning = statistics.stdev(self.planning_times) if len(self.planning_times) > 1 else 0
-        total_runtime = (
+        raw_times      = [t for _, t, _, _ in self.planning_times]
+        agent_counts   = [n for _, _, n, _ in self.planning_times]
+        spawn_flags    = [s for _, _, _, s in self.planning_times]
+
+        max_planning   = max(raw_times)                                    if raw_times else 0
+        std_planning   = statistics.stdev(raw_times) if len(raw_times) > 1 else 0
+        p95_planning   = float(np.percentile(raw_times, 95))              if raw_times else 0
+
+        total_runtime  = (
             (self.wall_end - self.wall_start)
             if (self.wall_start and self.wall_end) else 0
         )
 
-        # planning_time_per_agent: zip each step's time with its agent count
+        # Per-agent normalised planning times
         per_agent_times = [
             t / max(1, n)
-            for t, n in zip(self.planning_times, self.planning_agents)
+            for t, n in zip(raw_times, agent_counts)
             if n > 0
         ]
         avg_planning_per_agent = statistics.mean(per_agent_times) if per_agent_times else 0
-        max_planning_per_agent = max(per_agent_times)              if per_agent_times else 0
+        max_planning_per_agent = max(per_agent_times)             if per_agent_times else 0
+
+        # Spawn-step vs non-spawn-step planning time
+        spawn_step_times     = [t for t, s in zip(raw_times, spawn_flags) if s]
+        non_spawn_step_times = [t for t, s in zip(raw_times, spawn_flags) if not s]
+
+        avg_spawn_planning     = statistics.mean(spawn_step_times)     if spawn_step_times     else 0
+        avg_non_spawn_planning = statistics.mean(non_spawn_step_times) if non_spawn_step_times else 0
 
         # ── Congestion ───────────────────────────────────────────────────
-        avg_active     = statistics.mean(self.active_counts) if self.active_counts else 0
-        total_wait     = sum(self.plane_wait_steps.values())
-        avg_wait       = total_wait / len(planes) if planes else 0
-        avg_wait_ratio = statistics.mean(wait_ratios.values()) if wait_ratios else 0
+        avg_active      = statistics.mean(self.active_counts) if self.active_counts else 0
+        total_wait      = sum(self.plane_wait_steps.values())
+        avg_wait        = total_wait / len(planes) if planes else 0
+        avg_wait_ratio  = statistics.mean(wait_ratios.values()) if wait_ratios else 0
 
         # ── Fairness ─────────────────────────────────────────────────────
         travel_time_variance = (
@@ -318,7 +408,6 @@ class MetricsTracker:
             if len(travel_times) > 1 else 0
         )
 
-        # Coefficient of variation of detour ratios
         if len(detour_ratios) > 1:
             dr_vals         = list(detour_ratios.values())
             dr_mean         = statistics.mean(dr_vals)
@@ -327,68 +416,105 @@ class MetricsTracker:
         else:
             detour_ratio_cv = 0
 
+        # ── Throughput ───────────────────────────────────────────────────
+        throughput = len(landed_ids) / total_runtime if total_runtime > 0 else 0
+
+        # ── Path quality (smoothness) ────────────────────────────────────
+        dir_changes_per_plane = {
+            pid: self.plane_dir_changes.get(pid, 0)
+            for pid in spawned_ids
+        }
+        avg_dir_changes = (
+            statistics.mean(dir_changes_per_plane.values())
+            if dir_changes_per_plane else 0
+        )
+
+        # ── Completion ───────────────────────────────────────────────────
+        planes_spawned = len(spawned_ids)
+        planes_landed  = len(landed_ids)
+        completion_rate = planes_landed / planes_spawned if planes_spawned > 0 else 0
+
         # ── Assemble output ───────────────────────────────────────────────
         return {
+
             # ── RAW ──────────────────────────────────────────────────────
             "efficiency": {
-                "path_length_per_plane":    path_lengths,
-                "total_path_length":        total_path,
-                "avg_path_length":          avg_path,
-                "makespan_steps":           makespan,
-                "avg_travel_time_steps":    avg_travel_time,
+                "path_length_per_plane":        path_lengths,
+                "total_path_length":            total_path,
+                "avg_path_length":              avg_path,
+                "makespan_s":                   makespan,
+                "avg_travel_time_s":            avg_travel_time,
+                "travel_time_per_plane_s":      travel_times,
             },
             "safety": {
-                "collision_count":          self.collision_count,
-                "near_miss_count":          self.near_miss_count,
-                "min_separation_distance":  min_sep,
-                "safety_violation_rate":    safety_violation_rate,
+                "collision_count":              self.collision_count,
+                "near_miss_count":              self.near_miss_count,
+                "min_separation_distance":      min_sep,
+                "safety_violation_rate":        safety_violation_rate,
             },
             "computational": {
-                "max_planning_time_s":      max_planning,
-                "std_planning_time_s":      std_planning,
-                "total_runtime_s":          total_runtime,
+                "max_planning_time_s":          max_planning,
+                "p95_planning_time_s":          p95_planning,
+                "std_planning_time_s":          std_planning,
+                "total_runtime_s":              total_runtime,
+                # Spawn vs non-spawn replanning cost
+                # High ratio means algorithm struggles with dynamic arrivals
+                "avg_planning_time_spawn_step_s":     avg_spawn_planning,
+                "avg_planning_time_non_spawn_step_s": avg_non_spawn_planning,
             },
             "congestion": {
-                "avg_active_agents_per_step": avg_active,
-                "avg_wait_time_steps":        avg_wait,
-                "total_wait_steps":           total_wait,
+                "avg_active_agents_per_step":   avg_active,
+                "avg_wait_time_steps":          avg_wait,
+                "total_wait_steps":             total_wait,
             },
             "fairness": {
-                "travel_time_variance":     travel_time_variance,
-                "travel_times_per_plane":   {
-                    pid: self.plane_land_step[pid] - self.plane_spawn_step.get(pid, 1)
-                    for pid in self.plane_land_step
-                },
+                "travel_time_variance":         travel_time_variance,
+            },
+            "throughput": {
+                # Planes landed per second of real sim time.
+                # Use this alongside makespan when comparing at different N.
+                "planes_per_second":            throughput,
+            },
+            "path_quality": {
+                # Direction changes per plane — higher = more erratic paths.
+                # Algorithms with same detour_ratio but different smoothness
+                # can be distinguished here.
+                "avg_direction_changes":        avg_dir_changes,
+                "direction_changes_per_plane":  dir_changes_per_plane,
+            },
+            "completion": {
+                "planes_spawned":               planes_spawned,
+                "planes_landed":                planes_landed,
+                # < 1.0 means the sim ran out of time before all planes landed.
+                # Essential once you scale N up.
+                "completion_rate":              completion_rate,
             },
 
             # ── NORMALISED ───────────────────────────────────────────────
             "normalised": {
-                # Efficiency
-                # detour_ratio: 1.0 = optimal straight-line path
-                # e.g. 1.4 means the algorithm flew 40% further than necessary
-                "avg_detour_ratio":             avg_detour,
-                "detour_ratio_per_plane":       detour_ratios,
+                # detour_ratio: 1.0 = flew the shortest possible path
+                # e.g. 1.4 = flew 40% further than the Manhattan optimal
+                "avg_detour_ratio":                     avg_detour,
+                "detour_ratio_per_plane":               detour_ratios,
 
-                # norm_travel_time: 1.0 = landed in minimum possible steps
-                # e.g. 2.0 means took twice as long as the Manhattan distance suggests
-                "avg_norm_travel_time":         avg_norm_travel,
-                "norm_travel_time_per_plane":   norm_travel_times,
+                # norm_travel_time: travel_time_s / manhattan_distance
+                # Seconds spent per unit of Manhattan distance.
+                # Accounts for planes spawning at different distances.
+                # Compare across algorithms and different N.
+                "avg_norm_travel_time":                 avg_norm_travel,
+                "norm_travel_time_per_plane":           norm_travel_times,
 
-                # Computational
-                # planning_time_per_agent isolates algorithm cost from fleet size
-                # compare this across algorithms with different agent counts
-                "avg_planning_time_per_agent_s": avg_planning_per_agent,
-                "max_planning_time_per_agent_s": max_planning_per_agent,
+                # planning_time_per_agent: isolates algorithm cost from fleet size
+                "avg_planning_time_per_agent_s":        avg_planning_per_agent,
+                "max_planning_time_per_agent_s":        max_planning_per_agent,
 
-                # Congestion
                 # wait_ratio: 0.0 = never waited, 1.0 = entire trip was waiting
-                "avg_wait_ratio":               avg_wait_ratio,
-                "wait_ratio_per_plane":         wait_ratios,
+                "avg_wait_ratio":                       avg_wait_ratio,
+                "wait_ratio_per_plane":                 wait_ratios,
 
-                # Fairness
-                # detour_ratio_cv: 0.0 = all planes got equally good paths
-                # higher = algorithm is unfair to certain spawn positions
-                "detour_ratio_cv":              detour_ratio_cv,
+                # detour_ratio_cv: 0.0 = all planes got equally efficient paths
+                # Higher = algorithm is unfair to certain spawn positions
+                "detour_ratio_cv":                      detour_ratio_cv,
             },
         }
 
@@ -399,107 +525,99 @@ class MetricsTracker:
 class AlgoSimulation:
 
     def __init__(self, scenario: Scenario, planner, name: str):
-        self.name = name
-        self.planner = planner
+        self.name     = name
+        self.planner  = planner
+        self.scenario = scenario           # kept so step() can read colors
 
-        self.grid_size = scenario.grid_size
-        self.runway = scenario.runway
-        self.spawn_events = scenario.spawn_events.copy()
+        self.grid_size    = scenario.grid_size
+        self.runway       = scenario.runway
+        self.spawn_events = [
+            (t, pos) for t, pos, _ in scenario.spawn_events   # strip color; stored in scenario
+        ]
 
         self.grid = np.zeros((self.grid_size, self.grid_size), dtype=int)
 
-        self.plane_radius = PLANE_RADIUS
+        self.plane_radius        = PLANE_RADIUS
         self.collision_threshold = COLLISION_RADIUS
-        self.warning_threshold = WARNING_RADIUS
+        self.warning_threshold   = WARNING_RADIUS
 
-        self.planes = []
+        self.planes        = []
         self.plane_counter = 0
 
         self.total_compute_time = 0
-        self.planning_calls = 0
+        self.planning_calls     = 0
 
-        # Metrics
         self.metrics = MetricsTracker(
-                    collision_threshold=self.collision_threshold,
-                    warning_threshold=self.warning_threshold,
-                    runway=self.runway,
-                    grid_size=self.grid_size,
-                )
+            collision_threshold=self.collision_threshold,
+            warning_threshold=self.warning_threshold,
+            runway=self.runway,
+            grid_size=self.grid_size,
+        )
         self.metrics.start()
 
-        # Replay log
         self._replay_log = {
             "algorithm": name,
             "grid_size": self.grid_size,
-            "runway": list(self.runway),
-            "steps": [],
+            "runway":    list(self.runway),
+            "steps":     [],
         }
 
     # -------------------------------------------------
 
-    def step(self, current_time):
-        # Spawn using shared schedule
+    def step(self, current_time: float):
+
+        is_spawn_step = False
+
         while self.spawn_events and current_time >= self.spawn_events[0][0]:
             _, pos = self.spawn_events.pop(0)
 
             plane = {
-                "id": self.plane_counter,
-                "pos": pos,
-                "prev_pos": pos,
-                "history": [pos],
-                "active": True,
+                "id":          self.plane_counter,
+                "pos":         pos,
+                "prev_pos":    pos,
+                "history":     [pos],
+                "active":      True,
                 "path_length": 0,
-                "color": np.random.rand(3,).tolist(),
+                # Color comes from the scenario — same plane_id → same color
+                # across all three algorithm panels.
+                "color":       self.scenario.color_for(self.plane_counter),
             }
+
+            self.metrics.register_spawn(self.plane_counter, pos, current_time)
 
             self.plane_counter += 1
             self.planes.append(plane)
+            is_spawn_step = True
 
-        # Collect active planes
         active_planes = [p for p in self.planes if p["active"]]
 
         if not active_planes:
             return
 
-        # Snapshot positions before move
         prev_positions = {p["id"]: p["pos"] for p in active_planes}
 
-        # CENTRALIZED PLANNING CALL
         start_compute = time.time()
-
-        actions = self.planner(
-            self.grid.copy(),
-            active_planes,
-            self.runway
-        )
-
+        actions = self.planner(self.grid.copy(), active_planes, self.runway)
         compute = time.time() - start_compute
-        self.total_compute_time += compute
-        self.planning_calls += 1
 
-        # Execute actions simultaneously
+        self.total_compute_time += compute
+        self.planning_calls     += 1
+
         newly_landed = []
 
         for plane in active_planes:
+            pid = plane["id"]
 
-            if plane["id"] not in actions:
-                # Plane didn't move — record wait
-                self.metrics.record_wait(plane["id"])
+            if pid not in actions:
+                self.metrics.record_wait(pid)
                 continue
 
-            next_pos = actions[plane["id"]]
+            next_pos = actions[pid]
 
-            # Did the plane move closer to runway?
-            dist_before = np.linalg.norm(
-                np.array(plane["pos"]) - np.array(self.runway)
-            )
-            dist_after = np.linalg.norm(
-                np.array(next_pos) - np.array(self.runway)
-            )
-            if dist_after >= dist_before:
-                self.metrics.record_wait(plane["id"])
+            if next_pos == plane["pos"]:
+                self.metrics.record_wait(pid)
 
-            plane["prev_pos"] = plane["pos"]
+            plane["prev_pos"]     = plane["pos"]
             plane["path_length"] += float(np.linalg.norm(
                 np.array(next_pos) - np.array(plane["pos"])
             ))
@@ -508,27 +626,31 @@ class AlgoSimulation:
 
             if plane["pos"] == self.runway:
                 plane["active"] = False
-                newly_landed.append(plane["id"])
+                newly_landed.append(pid)
 
-        # Record landings before metrics step
         for pid in newly_landed:
-            self.metrics.record_landing(pid)
+            self.metrics.record_landing(pid, current_time)
 
-        # Record metrics for this step
         active_after = [p for p in self.planes if p["active"]]
-        self.metrics.record_step(compute, active_after, prev_positions)
 
-        # --- Replay log entry ---
+        self.metrics.record_step(
+            planning_time  = compute,
+            sim_time       = current_time,
+            active_planes  = active_after,
+            prev_positions = prev_positions,
+            is_spawn_step  = is_spawn_step,
+        )
+
         self._replay_log["steps"].append({
             "sim_time": current_time,
             "planes": [
                 {
-                    "id": p["id"],
-                    "pos": list(p["pos"]),
-                    "prev_pos": list(p["prev_pos"]),
-                    "active": p["active"],
+                    "id":          p["id"],
+                    "pos":         list(p["pos"]),
+                    "prev_pos":    list(p["prev_pos"]),
+                    "active":      p["active"],
                     "path_length": p["path_length"],
-                    "color": p["color"],
+                    "color":       p["color"],
                 }
                 for p in self.planes
             ],
@@ -539,17 +661,16 @@ class AlgoSimulation:
     # -------------------------------------------------
 
     def _update_grid(self):
-        self.grid[:] = 0
+        self.grid[:]           = 0
         self.grid[self.runway] = 1
 
     # -------------------------------------------------
 
     def finalize(self):
-        """Call after simulation ends to stop timers and save replay log."""
         self.metrics.finish()
 
         safe_name = self.name.replace(" ", "_").lower()
-        log_path = os.path.join(SIMULATION_LOG_DIR, f"{safe_name}_replay.json")
+        log_path  = os.path.join(SIMULATION_LOG_DIR, f"{safe_name}_replay.json")
 
         with open(log_path, "w") as f:
             json.dump(self._replay_log, f)
@@ -559,28 +680,26 @@ class AlgoSimulation:
     # -------------------------------------------------
 
     def compute_statistics(self):
-
-        rows = []
+        rows         = []
         total_length = 0
 
         for plane in self.planes:
             rows.append({
-                "algorithm": self.name,
-                "plane_id": plane["id"],
-                "path_length": plane["path_length"]
+                "algorithm":   self.name,
+                "plane_id":    plane["id"],
+                "path_length": plane["path_length"],
             })
             total_length += plane["path_length"]
 
-        avg_length = total_length / len(self.planes) if self.planes else 0
+        avg_length  = total_length / len(self.planes) if self.planes else 0
         avg_compute = self.total_compute_time / self.planning_calls if self.planning_calls else 0
 
         return rows, avg_length, avg_compute
 
     # -------------------------------------------------
 
-    def get_full_metrics(self):
+    def get_full_metrics(self) -> dict:
         return self.metrics.compute(self.planes)
-
 
 # =====================================================
 # MULTI PANEL VISUALIZER
@@ -833,104 +952,131 @@ class MultiAlgorithmVisualizer:
         print("\nComparison table saved to algorithm_comparison_table.csv")
 
     # -------------------------------------------------
-
     def _export_metrics(self):
-        """
-        Saves a comprehensive metrics JSON and a flat summary CSV
-        to results/metrics.json and results/metrics_summary.csv.
-        """
-        print("\n==== METRICS ====\n")
+            """
+            Saves a comprehensive metrics JSON and a flat summary CSV
+            to results/metrics.json and results/metrics_summary.csv.
+            """
+            print("\n==== METRICS ====\n")
 
-        all_metrics = {}
+            all_metrics = {}
 
-        for sim in self.simulations:
-            m = sim.get_full_metrics()
-            all_metrics[sim.name] = m
+            for sim in self.simulations:
+                m = sim.get_full_metrics()
+                all_metrics[sim.name] = m
 
-            print(f"\n--- {sim.name} ---")
+                print(f"\n--- {sim.name} ---")
 
-            eff = m["efficiency"]
-            print(f"  Total Path Length       : {eff['total_path_length']:.3f}")
-            print(f"  Avg Path Length         : {eff['avg_path_length']:.3f}")
-            print(f"  Makespan (steps)        : {eff['makespan_steps']}")
-            print(f"  Avg Travel Time (steps) : {eff['avg_travel_time_steps']:.2f}")
+                eff = m["efficiency"]
+                print(f"  Total Path Length           : {eff['total_path_length']:.3f}")
+                print(f"  Avg Path Length             : {eff['avg_path_length']:.3f}")
+                print(f"  Makespan (s)                : {eff['makespan_s']:.3f}")
+                print(f"  Avg Travel Time (s)         : {eff['avg_travel_time_s']:.3f}")
 
-            saf = m["safety"]
-            print(f"  Collisions              : {saf['collision_count']}")
-            print(f"  Near Misses             : {saf['near_miss_count']}")
-            min_sep = saf['min_separation_distance']
-            print(f"  Min Separation          : {min_sep:.3f}" if min_sep is not None else "  Min Separation          : N/A")
-            print(f"  Safety Violation Rate   : {saf['safety_violation_rate']:.4f}")
+                saf = m["safety"]
+                print(f"  Collisions                  : {saf['collision_count']}")
+                print(f"  Near Misses                 : {saf['near_miss_count']}")
+                min_sep = saf['min_separation_distance']
+                print(f"  Min Separation              : {min_sep:.3f}" if min_sep is not None else "  Min Separation              : N/A")
+                print(f"  Safety Violation Rate       : {saf['safety_violation_rate']:.4f}")
 
-            comp = m["computational"]
-            print(f"  Max Planning Time (s)   : {comp['max_planning_time_s']:.6f}")
-            print(f"  Std Planning Time (s)   : {comp['std_planning_time_s']:.6f}")
-            print(f"  Total Runtime (s)       : {comp['total_runtime_s']:.3f}")
+                comp = m["computational"]
+                print(f"  Max Planning Time (s)       : {comp['max_planning_time_s']:.6f}")
+                print(f"  P95 Planning Time (s)       : {comp['p95_planning_time_s']:.6f}")
+                print(f"  Std Planning Time (s)       : {comp['std_planning_time_s']:.6f}")
+                print(f"  Total Runtime (s)           : {comp['total_runtime_s']:.3f}")
+                print(f"  Avg Plan Time (spawn step)  : {comp['avg_planning_time_spawn_step_s']:.6f}")
+                print(f"  Avg Plan Time (normal step) : {comp['avg_planning_time_non_spawn_step_s']:.6f}")
 
-            cong = m["congestion"]
-            print(f"  Avg Active Agents/Step  : {cong['avg_active_agents_per_step']:.2f}")
-            print(f"  Avg Wait Time (steps)   : {cong['avg_wait_time_steps']:.2f}")
+                cong = m["congestion"]
+                print(f"  Avg Active Agents/Step      : {cong['avg_active_agents_per_step']:.2f}")
+                print(f"  Avg Wait Time (steps)       : {cong['avg_wait_time_steps']:.2f}")
 
-            fair = m["fairness"]
-            print(f"  Travel Time Variance    : {fair['travel_time_variance']:.2f}")
+                fair = m["fairness"]
+                print(f"  Travel Time Variance        : {fair['travel_time_variance']:.4f}")
 
-            norm = m["normalised"]
-            print(f"\n  -- Normalised --")
-            print(f"  Avg Detour Ratio        : {norm['avg_detour_ratio']:.3f}  (1.0 = optimal straight-line)")
-            print(f"  Avg Norm Travel Time    : {norm['avg_norm_travel_time']:.3f}  (1.0 = min possible steps)")
-            print(f"  Avg Plan Time/Agent (s) : {norm['avg_planning_time_per_agent_s']:.6f}")
-            print(f"  Max Plan Time/Agent (s) : {norm['max_planning_time_per_agent_s']:.6f}")
-            print(f"  Avg Wait Ratio          : {norm['avg_wait_ratio']:.3f}  (0.0 = never waited)")
-            print(f"  Detour Ratio CV         : {norm['detour_ratio_cv']:.3f}  (0.0 = perfectly fair)")
+                tp = m["throughput"]
+                print(f"  Throughput (planes/s)       : {tp['planes_per_second']:.3f}")
 
+                pq = m["path_quality"]
+                print(f"  Avg Direction Changes       : {pq['avg_direction_changes']:.2f}")
 
-        # Save full JSON
-        json_path = os.path.join(RESULTS_DIR, "metrics.json")
-        with open(json_path, "w") as f:
-            json.dump(all_metrics, f, indent=2)
-        print(f"\nFull metrics saved → {json_path}")
+                comp_ = m["completion"]
+                print(f"  Completion Rate             : {comp_['completion_rate']:.2%}  "
+                    f"({comp_['planes_landed']}/{comp_['planes_spawned']} landed)")
 
-        # Save flat CSV summary (one row per algorithm)
-        csv_path = os.path.join(RESULTS_DIR, "metrics_summary.csv")
-        fieldnames = [
-            "algorithm",
-            # Efficiency
-            "total_path_length",
-            "avg_path_length",
-            "makespan_steps",
-            "avg_travel_time_steps",
-            # Safety
-            "collision_count",
-            "near_miss_count",
-            "min_separation_distance",
-            "safety_violation_rate",
-            # Computational
-            "max_planning_time_s",
-            "std_planning_time_s",
-            "total_runtime_s",
-            # Congestion
-            "avg_active_agents_per_step",
-            "avg_wait_time_steps",
-            "total_wait_steps",
-            # Fairness
-            "travel_time_variance",
-        ]
+                norm = m["normalised"]
+                print(f"\n  -- Normalised --")
+                print(f"  Avg Detour Ratio            : {norm['avg_detour_ratio']:.3f}  (1.0 = optimal path)")
+                print(f"  Avg Norm Travel Time        : {norm['avg_norm_travel_time']:.3f}  (s per Manhattan unit)")
+                print(f"  Avg Plan Time/Agent (s)     : {norm['avg_planning_time_per_agent_s']:.6f}")
+                print(f"  Max Plan Time/Agent (s)     : {norm['max_planning_time_per_agent_s']:.6f}")
+                print(f"  Avg Wait Ratio              : {norm['avg_wait_ratio']:.3f}  (0.0 = never waited)")
+                print(f"  Detour Ratio CV             : {norm['detour_ratio_cv']:.3f}  (0.0 = perfectly fair)")
 
-        rows = []
-        for algo_name, m in all_metrics.items():
-            row = {
-                "algorithm": algo_name,
-                **{k: v for k, v in m["efficiency"].items() if k != "path_length_per_plane"},
-                **{k: v for k, v in m["safety"].items()},
-                **{k: v for k, v in m["computational"].items()},
-                **{k: v for k, v in m["congestion"].items()},
-                "travel_time_variance": m["fairness"]["travel_time_variance"],
-            }
-            rows.append(row)
+            # ── Full JSON ─────────────────────────────────────────────────────
+            json_path = os.path.join(RESULTS_DIR, "metrics.json")
+            with open(json_path, "w") as f:
+                json.dump(all_metrics, f, indent=2)
+            print(f"\nFull metrics saved → {json_path}")
 
-        with open(csv_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(rows)
+            # ── Flat CSV summary (one row per algorithm) ──────────────────────
+            csv_path = os.path.join(RESULTS_DIR, "metrics_summary.csv")
 
-        print(f"Metrics summary CSV saved → {csv_path}")
+            fieldnames = [
+                "algorithm",
+                # Efficiency
+                "total_path_length", "avg_path_length",
+                "makespan_s", "avg_travel_time_s",
+                # Safety
+                "collision_count", "near_miss_count",
+                "min_separation_distance", "safety_violation_rate",
+                # Computational
+                "max_planning_time_s", "p95_planning_time_s", "std_planning_time_s",
+                "total_runtime_s",
+                "avg_planning_time_spawn_step_s", "avg_planning_time_non_spawn_step_s",
+                # Congestion
+                "avg_active_agents_per_step", "avg_wait_time_steps", "total_wait_steps",
+                # Fairness
+                "travel_time_variance",
+                # Throughput
+                "planes_per_second",
+                # Path quality
+                "avg_direction_changes",
+                # Completion
+                "planes_spawned", "planes_landed", "completion_rate",
+                # Normalised
+                "avg_detour_ratio", "avg_norm_travel_time",
+                "avg_planning_time_per_agent_s", "max_planning_time_per_agent_s",
+                "avg_wait_ratio", "detour_ratio_cv",
+            ]
+
+            rows = []
+            for algo_name, m in all_metrics.items():
+                row = {
+                    "algorithm":                         algo_name,
+                    **{k: v for k, v in m["efficiency"].items()
+                    if k not in ("path_length_per_plane", "travel_time_per_plane_s")},
+                    **{k: v for k, v in m["safety"].items()},
+                    **{k: v for k, v in m["computational"].items()},
+                    **{k: v for k, v in m["congestion"].items()},
+                    "travel_time_variance":              m["fairness"]["travel_time_variance"],
+                    "planes_per_second":                 m["throughput"]["planes_per_second"],
+                    "avg_direction_changes":             m["path_quality"]["avg_direction_changes"],
+                    **{k: v for k, v in m["completion"].items()},
+                    "avg_detour_ratio":                  m["normalised"]["avg_detour_ratio"],
+                    "avg_norm_travel_time":              m["normalised"]["avg_norm_travel_time"],
+                    "avg_planning_time_per_agent_s":     m["normalised"]["avg_planning_time_per_agent_s"],
+                    "max_planning_time_per_agent_s":     m["normalised"]["max_planning_time_per_agent_s"],
+                    "avg_wait_ratio":                    m["normalised"]["avg_wait_ratio"],
+                    "detour_ratio_cv":                   m["normalised"]["detour_ratio_cv"],
+                }
+                rows.append(row)
+
+            with open(csv_path, "w", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(rows)
+
+            print(f"Metrics summary CSV saved → {csv_path}")
+        

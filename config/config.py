@@ -1,22 +1,29 @@
+import random
+
 SIM_TIME = 60
 GRID_SIZE = 50
-MAX_PLANES = 15
 
+# Changes
+MAX_PLANES = 15
+RUNWAY = (GRID_SIZE // 2, GRID_SIZE // 2)
+# RUNWAY = (random.randint(GRID_SIZE // 4, 3* GRID_SIZE // 4), random.randint(GRID_SIZE // 4, 3* GRID_SIZE // 4))
+SPAWN_FREQUENCUY = 1
+
+# Plane characteristics
 PLANE_RADIUS = 1
 COLLISION_RADIUS = PLANE_RADIUS 
 WARNING_RADIUS = 1.5 * PLANE_RADIUS
 
-MAX_NODES = 600
-# Possible future changes
-
-RUNWAY_START = (GRID_SIZE // 2, GRID_SIZE - 1)
-RUNWAY_END = (GRID_SIZE // 2, GRID_SIZE - 5)
-SPAWN_FREQUENCUY = 1
+# CBS Config
+MAX_NODES = 1000
 
 # LRA Config
-LOOKAHEAD = 8              # slightly larger horizon
+LOOKAHEAD = 8              
 WAIT_ALLOWED = True
 
-GOAL_WEIGHT = 1.2          # bias toward runway
-CONFLICT_PENALTY = 3       # soft penalty instead of hard block
-INERTIA_BONUS = 0.3        # reward continuing direction
+GOAL_WEIGHT = 1.2         
+CONFLICT_PENALTY = 3       
+INERTIA_BONUS = 0.3        
+
+# SpaceTime A* Config
+SPAWN_BIAS_STEPS = 8
