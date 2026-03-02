@@ -59,7 +59,7 @@ import heapq
 import math
 from typing import Dict, List, Optional, Set, Tuple
 
-from config.config import PLANE_RADIUS, WARNING_RADIUS, MAX_NODES
+from config.config import PLANE_RADIUS, WARNING_RADIUS, MAX_NODES, COLLISION_RADIUS
 from algos.spacetime_astar import spacetime_astar
 from algos.algo_helpers import manhattan
 
@@ -111,7 +111,6 @@ def _extract_agent_constraints(
     """Pull out the (cell, timestep) constraint set for one agent."""
     return {(cell, t) for (aid, cell, t) in all_constraints if aid == agent_id}
 
-
 def _make_constraints(
     constrained_agent: int,
     other_pos:         Pos,
@@ -119,14 +118,10 @@ def _make_constraints(
     grid_size:         int,
 ) -> List[Constraint]:
     """
-    Constraints that keep `constrained_agent` >= WARNING_RADIUS from `other_pos`
-    at `conflict_t`. Blocks every cell within WARNING_RADIUS of other_pos.
+    Standard CBS vertex constraint:
+    forbid constrained_agent from occupying other_pos at conflict_t.
     """
-    return [
-        (constrained_agent, cell, conflict_t)
-        for cell in _cells_within_radius(other_pos, WARNING_RADIUS, grid_size)
-    ]
-
+    return [(constrained_agent, other_pos, conflict_t)]
 
 # ---------------------------------------------------------------------------
 # High level: conflict detection
@@ -161,7 +156,7 @@ def _find_first_conflict(
                 pos_b = pb[min(t, len(pb) - 1)]
                 dist  = math.sqrt((pos_a[0] - pos_b[0])**2 + (pos_a[1] - pos_b[1])**2)
 
-                if dist < WARNING_RADIUS:
+                if dist < COLLISION_RADIUS:
                     if earliest is None or t < earliest[4]:
                         earliest = (a, b, pos_a, pos_b, t)
                     break
@@ -194,7 +189,7 @@ def _find_all_conflicts(
                 dist  = math.sqrt((pos_a[0] - pos_b[0])**2 + (pos_a[1] - pos_b[1])**2)
                 pair  = (min(a, b), max(a, b))
 
-                if dist < WARNING_RADIUS and pair not in seen:
+                if dist < COLLISION_RADIUS and pair not in seen:
                     seen.add(pair)
                     conflicts.append((a, b, pos_a, t, dist))
                     break
@@ -343,7 +338,7 @@ def cbs_planner(
                 f"{b}@{_last_positions.get(b,'?')}→{_last_actions.get(b,'none')} | "
                 f"now dist={curr_dist:.2f}"
             )
-            if curr_dist < WARNING_RADIUS:
+            if curr_dist < COLLISION_RADIUS:
                 print(f"           💥 CONFIRMED: conflict carried over!")
 
     # ------------------------------------------------------------------
@@ -358,7 +353,7 @@ def cbs_planner(
                 (id_to_plane[a]["pos"][0] - id_to_plane[b]["pos"][0])**2 +
                 (id_to_plane[a]["pos"][1] - id_to_plane[b]["pos"][1])**2
             )
-            if d < WARNING_RADIUS:
+            if d < COLLISION_RADIUS:
                 pre.append((a, b, id_to_plane[a]["pos"], id_to_plane[b]["pos"], d))
 
     if pre:

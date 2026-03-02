@@ -30,9 +30,6 @@ CBS is a two-level search algorithm for multi-agent path finding (MAPF):
     its accumulated set of (cell, timestep) vertex constraints. Each constraint
     (cell, t) blocks the agent from occupying `cell` at timestep `t`.
 
-    Delegated to the unified spacetime_astar() function in algos/spacetime_astar.py,
-    called with grid_size= and constraints=.
-
 BUGS FIXED VS ORIGINAL
 -----------------------
 1. CONSTRAINT RADIUS was WARNING_RADIUS/2 — too small.
@@ -60,8 +57,6 @@ import math
 from typing import Dict, List, Optional, Set, Tuple
 
 from config.config import PLANE_RADIUS, WARNING_RADIUS, MAX_NODES
-from algos.spacetime_astar import spacetime_astar
-from algos.algo_helpers import manhattan
 
 # ---------------------------------------------------------------------------
 # Types
@@ -92,12 +87,105 @@ def _cells_within_radius(center: Pos, radius: float, grid_size: int) -> List[Pos
     return cells
 
 
+def _neighbors(pos: Pos, grid_size: int) -> List[Pos]:
+    """Cardinal neighbours only — no wait-in-place."""
+    r, c = pos
+    return [
+        (nr, nc)
+        for nr, nc in [(r-1, c), (r+1, c), (r, c-1), (r, c+1)]
+        if 0 <= nr < grid_size and 0 <= nc < grid_size
+    ]
+
+
+def _heuristic(pos: Pos, goal: Pos) -> int:
+    return abs(pos[0] - goal[0]) + abs(pos[1] - goal[1])
+
+
 def _goal_land_t(path: List[Pos], goal: Pos) -> int:
     """First timestep at which agent occupies the goal cell."""
     for t, pos in enumerate(path):
         if pos == goal:
             return t
     return len(path)
+
+
+# ---------------------------------------------------------------------------
+# Low level: Space-Time A*
+# ---------------------------------------------------------------------------
+
+def _spacetime_astar(
+    start:       Pos,
+    goal:        Pos,
+    grid_size:   int,
+    constraints: Set[Tuple[Pos, int]],
+    max_t:       int = 300,
+) -> Optional[List[Pos]]:
+    """
+    Shortest path from start to goal in space-time, respecting constraints.
+
+    A constraint (cell, t) means this agent must not occupy `cell` at time `t`.
+    When expanding state (pos, t) and considering move to npos at t+1:
+      reject if (npos, t+1) in constraints.
+    """
+    counter   = 0
+    open_heap = [(_heuristic(start, goal), counter, 0, start)]
+    came_from: Dict[Tuple[Pos, int], Optional[Tuple[Pos, int]]] = {(start, 0): None}
+    best_g:    Dict[Tuple[Pos, int], int]                        = {(start, 0): 0}
+
+    while open_heap:
+        _f, _ctr, g, pos = heapq.heappop(open_heap)
+        t = g
+
+        if best_g.get((pos, t), float("inf")) < g:
+            continue   # stale entry
+
+        if pos == goal:
+            path, state = [], (pos, t)
+            while state is not None:
+                path.append(state[0])
+                state = came_from[state]
+            path.reverse()
+            return path
+
+        if t >= max_t:
+            continue
+
+        for npos in _neighbors(pos, grid_size):
+            nt = t + 1
+            if (npos, nt) in constraints:
+                continue
+            ng  = g + 1
+            key = (npos, nt)
+            if best_g.get(key, float("inf")) <= ng:
+                continue
+            best_g[key]    = ng
+            came_from[key] = (pos, t)
+            counter       += 1
+
+            # ---- Edge-avoidance bias only for first few timesteps ----
+            epsilon = 1e-3
+            spawn_bias_steps = 6   # apply bias only shortly after spawn
+
+            bias = 0
+            if t < spawn_bias_steps:
+                x, y = npos
+                if (
+                    x == 0 or
+                    y == 0 or
+                    x == grid_size - 1 or
+                    y == grid_size - 1
+                ):
+                    bias = 1
+
+            counter += 1
+            heapq.heappush(
+                open_heap,
+                (ng + _heuristic(npos, goal) + epsilon * bias,
+                counter,
+                ng,
+                npos)
+            )
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -238,13 +326,21 @@ def _cbs(
     """
     Run CBS. Returns (paths, budget_exhausted, nodes_expanded).
 
-    Low-level planner: spacetime_astar(..., grid_size=grid_size, constraints=...).
+    Algorithm:
+      1. Root: plan each agent individually with no constraints.
+      2. Pop lowest-cost CT node.
+      3. Find the first conflict in its path set.
+      4. No conflict → return (optimal solution).
+      5. Conflict (a, b, pos_a, pos_b, t) → branch:
+           Child A: constrain agent_a away from pos_b at t, replan agent_a
+           Child B: constrain agent_b away from pos_a at t, replan agent_b
+      6. Repeat until solution or budget exhausted.
     """
 
     # ---- Root node: unconstrained individual plans ----
     root_paths: Dict[int, List[Pos]] = {}
     for plane in agents:
-        path = spacetime_astar(
+        path = _spacetime_astar(
             start=plane["pos"],
             goal=goal,
             grid_size=grid_size,
@@ -277,7 +373,7 @@ def _cbs(
             agent_cs  = _extract_agent_constraints(child_constraints, constrained_agent)
             start_pos = next(p["pos"] for p in agents if p["id"] == constrained_agent)
 
-            new_path = spacetime_astar(
+            new_path = _spacetime_astar(
                 start=start_pos,
                 goal=goal,
                 grid_size=grid_size,
