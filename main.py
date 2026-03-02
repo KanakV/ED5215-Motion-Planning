@@ -4,7 +4,7 @@ from config.config import SIM_TIME, GRID_SIZE, MAX_PLANES
 # Import Algorithms
 from algos.cooperative_astar import cooperative_planner
 from algos.longrange_astar import lra_planner
-from algos.cbs import cbs_planner
+from algos.cbs_point import cbs_planner
 
 scenario = Scenario(
     grid_size=GRID_SIZE,
